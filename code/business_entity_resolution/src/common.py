@@ -1,4 +1,4 @@
-"""Shared paths, file reading and the competition metric."""
+"""Shared paths, file reading, id encoding and the competition metric."""
 import os
 import time
 import polars as pl
@@ -10,6 +10,7 @@ OUT = os.environ.get("BER_OUT", os.path.join(ROOT, "output"))
 os.makedirs(WORK, exist_ok=True)
 
 _T0 = time.time()
+SRC_MULT = 10_000_000_000   # integer id = source * SRC_MULT + numeric part of the id
 
 
 def log(*a):
@@ -24,6 +25,17 @@ def read_tsv(path):
 
 def raw_path(split, k):
     return os.path.join(DATA, split, f"{split}_source{k}.tsv")
+
+
+def id_to_int(col):
+    """'S2-000123' -> 2*SRC_MULT + 123 (works for S1/S2/S3)."""
+    c = pl.col(col)
+    return c.str.slice(1, 1).cast(pl.Int64) * SRC_MULT + c.str.slice(3).cast(pl.Int64)
+
+
+def int_to_id(col):
+    c = pl.col(col)
+    return pl.format("S{}-{}", (c // SRC_MULT).cast(pl.Utf8), (c % SRC_MULT).cast(pl.Utf8))
 
 
 def read_truth():
@@ -52,6 +64,22 @@ def macro_f05(pred_map, true_map, s1_ids):
     return sum(f05(pred_map.get(s, set()), true_map.get(s, set())) for s in s1_ids) / len(s1_ids)
 
 
+def macro_f05_df(pred, truth, s1):
+    """Vectorised macro F0.5. pred/truth: DataFrames with int columns s, q. s1: DataFrame with column s."""
+    tp = pred.join(truth, on=["s", "q"]).group_by("s").len("tp")
+    d = (s1.join(pred.group_by("s").len("np"), on="s", how="left")
+           .join(truth.group_by("s").len("nt"), on="s", how="left")
+           .join(tp, on="s", how="left").fill_null(0))
+    p, r = pl.col("tp") / pl.col("np"), pl.col("tp") / pl.col("nt")
+    f = (pl.when(pl.col("nt") == 0).then((pl.col("np") == 0).cast(pl.Float64))
+           .when(pl.col("tp") == 0).then(0.0)
+           .otherwise(1.25 * p * r / (0.25 * p + r)))
+    return d.select(f.mean()).item()
+
+
 if __name__ == "__main__":
     # the worked example from the problem statement: expected 0.714
     print(round(f05({"S2-00047", "S2-00193", "S3-00812"}, {"S2-00047", "S3-00812"}), 3))
+    pr = pl.DataFrame({"s": [1, 1, 1], "q": [47, 193, 812]})
+    tr = pl.DataFrame({"s": [1, 1], "q": [47, 812]})
+    print(round(macro_f05_df(pr, tr, pl.DataFrame({"s": [1]})), 3))

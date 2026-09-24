@@ -1,12 +1,21 @@
-"""End-to-end pipeline.
+"""End-to-end pipeline (v2).
 
-  python pipeline.py dev  [frac]   # validate on a slice of TRAIN: blocking recall, OOF macro F0.5, saves model
-  python pipeline.py test          # run the saved model on TEST, write output/*.tsv
+  python pipeline.py build train full        # blocking + features for all of TRAIN -> WORK/pairs/full/
+  python pipeline.py build train s10 0.1     # same on a 10% slice (fast ablations)
+  python pipeline.py train full              # stage-1 + stage-2 LightGBM, out-of-fold validation, thresholds
+  python pipeline.py build test test         # blocking + features for TEST -> WORK/pairs/test/
+  python pipeline.py predict full test       # apply models trained on `full` -> output/*.tsv
 
-Decision rule: every S2/S3 row is given to its single highest-probability S1 candidate if that
-probability >= threshold (training data shows an S2/S3 row never matches two S1 rows),
-otherwise to nobody. The threshold is tuned on out-of-fold predictions with the real metric.
+Validation: 3 folds grouped by true S1 (all S2/S3 rows of one business share a fold). Scores are
+reported on the S1 rows OUTSIDE the embedding fine-tuning partition (see embed.emb_partition), and
+stage-1/2 models are trained only on rows whose true S1 is in that held-out half (or who have no match),
+so the learned-embedding feature never leaks.
+
+Decision: each S2/S3 row goes to its single best S1 (by stage-2 probability) if that probability is at
+least the threshold of its segment (address missing? non-Latin name? source?), else to nobody.
+Thresholds are tuned on out-of-fold predictions with the competition metric.
 """
+import glob
 import json
 import os
 import sys
@@ -14,154 +23,289 @@ import zlib
 import lightgbm as lgb
 import numpy as np
 import polars as pl
-from common import WORK, OUT, log, read_truth, macro_f05
+from common import WORK, OUT, log, read_truth, id_to_int, int_to_id, macro_f05_df
 from candidates import FEATURES, country_pairs
 
 N_FOLDS = 3
-PARAMS = dict(objective="binary", learning_rate=0.1, num_leaves=127, min_data_in_leaf=200,
-              feature_fraction=0.8, bagging_fraction=0.7, bagging_freq=1, num_threads=11, verbose=-1)
-ROUNDS = 400
-TRAIN_ROWS = 6_000_000
+PARAMS1 = dict(objective="binary", learning_rate=0.08, num_leaves=255, min_data_in_leaf=200,
+               feature_fraction=0.8, bagging_fraction=0.7, bagging_freq=1, lambda_l2=1.0,
+               num_threads=11, verbose=-1, seed=7)
+ROUNDS1 = 600
+PARAMS2 = dict(PARAMS1, num_leaves=127, learning_rate=0.05)
+ROUNDS2 = 500
+TOPK2 = 2
+SAMPLE_RATE = {"full": 0.10, "s10": 0.8}
+SEG_COLS = ["addr_missing", "name_nonlatin", "src"]
+S2FEATS = ["p1", "p1_rank", "p1_margin", "s_in_cnt", "s_in_sum", "s_in_max_other", "s_in_same_src",
+           "q_rank_in_s", "s_base_cnt"]
 
 
 def load(split, k, cols=None):
     return pl.read_parquet(os.path.join(WORK, f"{split}_s{k}.parquet"), columns=cols)
 
 
-def Xmat(df):
-    return df.select([pl.col(c).cast(pl.Float32) for c in FEATURES]).to_numpy()
+def crc(x):
+    return zlib.crc32(x.encode())
 
 
-def _h(s):
-    return zlib.crc32(s.encode()) % N_FOLDS
+def pairs_dir(tag):
+    return os.path.join(WORK, "pairs", tag)
 
 
-def decide(pairs, t):
-    """pairs: q_id, s_id, prob -> dict s_id -> set(q_id)."""
-    best = pairs.sort("prob", descending=True).unique("q_id", keep="first").filter(pl.col("prob") >= t)
-    out = {}
-    for s, q in best.select("s_id", "q_id").iter_rows():
-        out.setdefault(s, set()).add(q)
-    return out
-
-
-def tune(pairs, true_map, s1_ids, grid=np.arange(0.2, 0.95, 0.05)):
-    res = [(round(float(t), 2), macro_f05(decide(pairs, t), true_map, s1_ids)) for t in grid]
-    return max(res, key=lambda x: x[1]), res
-
-
-def dev(frac=0.1):
-    truth = read_truth()
-    s1 = load("train", 1)
-    s1 = s1.filter(pl.col("entity_id").map_elements(lambda x: zlib.crc32(x.encode()) % 1000 < frac * 1000,
-                                                   return_dtype=pl.Boolean))
-    ids = set(s1["entity_id"])
-    tr = truth.filter(pl.col("s1_id").is_in(list(ids)))
-    matched_all = set(truth["q_id"])
-    keep_q = set(tr["q_id"])
-    q = pl.concat([load("train", k) for k in (2, 3)])
-    q = q.filter(pl.col("entity_id").is_in(list(keep_q)) |
-                 (~pl.col("entity_id").is_in(list(matched_all)) &
-                  pl.col("entity_id").map_elements(lambda x: zlib.crc32(x.encode()) % 1000 < frac * 1000,
-                                                   return_dtype=pl.Boolean)))
-    log(f"dev slice: S1 {s1.height}, S2/S3 {q.height} (matched {len(keep_q)})")
-
-    parts = []
-    for c in s1["country"].unique().to_list():
+# ---------------------------------------------------------------- build
+def build(split, tag, frac=None):
+    out = pairs_dir(tag)
+    os.makedirs(out, exist_ok=True)
+    s1 = load(split, 1)
+    q = pl.concat([load(split, k) for k in (2, 3)])
+    if frac:
+        truth = read_truth()
+        s1 = s1.filter(pl.col("entity_id").map_elements(lambda x: crc(x) % 1000 < frac * 1000, return_dtype=pl.Boolean))
+        keep = set(truth.filter(pl.col("s1_id").is_in(s1["entity_id"].to_list()))["q_id"])
+        matched = set(truth["q_id"])
+        q = q.filter(pl.col("entity_id").is_in(list(keep)) |
+                     (~pl.col("entity_id").is_in(list(matched)) &
+                      pl.col("entity_id").map_elements(lambda x: crc(x) % 1000 < frac * 1000, return_dtype=pl.Boolean)))
+    s1.select(s=id_to_int("entity_id"), s1_id="entity_id", country="country").write_parquet(os.path.join(out, "s1.parquet"))
+    q.select(q=id_to_int("entity_id"), country="country", src="src", addr_missing="addr_missing",
+             name_nonlatin="name_nonlatin").write_parquet(os.path.join(out, "q.parquet"))
+    log(f"build {split}/{tag}: S1 {s1.height}, S2/S3 {q.height}")
+    for c in s1["country"].unique().sort().to_list():
+        done = os.path.join(out, f"{c}.done")
+        if os.path.exists(done):
+            continue
         log(f"country {c}")
-        country_pairs(s1.filter(pl.col("country") == c), q.filter(pl.col("country") == c), parts.append)
-    P = pl.concat(parts).rename({"entity_id": "q_id", "entity_id_s": "s_id"})
+
+        def on_chunk(p, i):
+            p = (p.with_columns(q=id_to_int("entity_id"), s=id_to_int("entity_id_s"))
+                  .select(["q", "s"] + [pl.col(f).cast(pl.Float32) for f in FEATURES]))
+            p.write_parquet(os.path.join(out, f"{c}_{i:03d}.parquet"))
+
+        country_pairs(s1.filter(pl.col("country") == c), q.filter(pl.col("country") == c), split, on_chunk)
+        open(done, "w").close()
+
+
+def chunk_files(tag):
+    return sorted(f for f in glob.glob(os.path.join(pairs_dir(tag), "*_*.parquet")))
+
+
+# ---------------------------------------------------------------- labels / folds
+def train_meta(tag):
+    """S1 table with fold + eval flag; q->true s map; truth pairs (ints)."""
+    s1 = pl.read_parquet(os.path.join(pairs_dir(tag), "s1.parquet"))
+    s1 = s1.with_columns(h=pl.col("s1_id").map_elements(crc, return_dtype=pl.Int64)).with_columns(
+        fold=(pl.col("h") % N_FOLDS).cast(pl.Int8), is_eval=(pl.col("h") % 1000 < 500)).drop("h")
+    t = read_truth().select(s=id_to_int("s1_id"), q=id_to_int("q_id")).join(s1.select("s"), on="s")
+    qmap = t.join(s1.select("s", "fold", "is_eval"), on="s").select("q", true_s="s", qfold="fold", q_eval="is_eval")
+    return s1, t, qmap
+
+
+def attach(p, qmap, rate=None):
+    p = (p.join(qmap, on="q", how="left")
+          .with_columns(label=(pl.col("true_s") == pl.col("s")).fill_null(False),
+                        fold=pl.coalesce("qfold", (pl.col("q") % N_FOLDS).cast(pl.Int8)),
+                        eligible=pl.col("q_eval").fill_null(True)))
+    if rate is not None:
+        p = p.filter(pl.col("eligible") & ((pl.col("q").hash(seed=1) % 1000) < rate * 1000))
+    return p
+
+
+def X(df, cols):
+    return df.select([pl.col(c).cast(pl.Float32) for c in cols]).to_numpy()
+
+
+def topk(p):
+    """Best TOPK2 candidates per q by stage-1 prob; lower-ranked ones only if p1 >= 0.01 (saves memory)."""
+    t = p.sort("p1", descending=True).group_by("q", maintain_order=True).head(TOPK2)
+    return t.filter((pl.col("p1").rank("ordinal", descending=True).over("q") == 1) | (pl.col("p1") >= 0.01))
+
+
+# ---------------------------------------------------------------- stage-2 features
+def stage2_features(b, qinfo):
+    """b: top-TOPK2 rows per q with p1. Adds competition features from the S1 side."""
+    b = b.with_columns(p1_rank=pl.col("p1").rank("ordinal", descending=True).over("q").cast(pl.Float32))
+    b = b.with_columns(p1_margin=pl.col("p1") - pl.when(pl.len().over("q") > 1)
+                       .then(pl.col("p1").sum().over("q") - pl.col("p1")).otherwise(0.0))
+    b = b.join(qinfo.select("q", "src"), on="q", how="left")
+    top = b.filter(pl.col("p1_rank") == 1)
+    hi = (pl.col("p1") >= 0.5).cast(pl.Float32)
+    g = top.group_by("s").agg(cnt=hi.sum(), sm=pl.col("p1").sum(), m1=pl.col("p1").max(),
+                              m2=pl.col("p1").top_k(2).min(), n=pl.len())
+    gs = top.group_by("s", "src").agg(cs=hi.sum())
+    b = b.join(g, on="s", how="left").join(gs, on=["s", "src"], how="left").with_columns(
+        [pl.col(c).fill_null(0) for c in ("cnt", "sm", "m1", "m2", "n", "cs")])
+    self_top = (pl.col("p1_rank") == 1)
+    self_hi = (self_top & (pl.col("p1") >= 0.5)).cast(pl.Float32)
+    b = b.with_columns(
+        s_in_cnt=pl.col("cnt") - self_hi,
+        s_in_sum=pl.col("sm") - pl.when(self_top).then(pl.col("p1")).otherwise(0.0),
+        s_in_max_other=pl.when(self_top & (pl.col("p1") == pl.col("m1")) & (pl.col("n") > 1)).then(pl.col("m2"))
+                         .when(self_top & (pl.col("n") == 1)).then(0.0).otherwise(pl.col("m1")),
+        s_in_same_src=pl.col("cs") - self_hi,
+        q_rank_in_s=pl.col("p1").rank("ordinal", descending=True).over("s").cast(pl.Float32),
+        s_base_cnt=pl.len().over("s").cast(pl.Float32),
+    ).drop("cnt", "sm", "m1", "m2", "n", "cs", "src")
+    return b
+
+
+# ---------------------------------------------------------------- decision
+def decide(b, prob, thr, qinfo):
+    """Top-1 S1 per q by `prob`, kept if prob >= its segment threshold. Returns DataFrame s, q."""
+    top = b.sort(prob, descending=True).unique("q", keep="first").join(qinfo, on="q", how="left")
+    seg = pl.concat_str([pl.col(c).cast(pl.Utf8) for c in SEG_COLS], separator="|")
+    t = seg.replace_strict(thr, default=thr.get("default", 0.5), return_dtype=pl.Float64) if isinstance(thr, dict) \
+        else pl.lit(thr)
+    return top.filter(pl.col(prob) >= t).select("s", "q")
+
+
+def tune(b, prob, truth, s1e, qinfo):
+    """Global threshold, then per-segment coordinate ascent. Returns (thresholds, score, global_score)."""
+    grid = [round(x, 3) for x in np.arange(0.3, 0.96, 0.025)]
+    evalset = set(s1e["s"].to_list())
+    bb = b.filter(pl.col("s").is_in(list(evalset)) | pl.col("q").is_in(truth["q"].to_list()))
+
+    def score(thr):
+        return macro_f05_df(decide(bb, prob, thr, qinfo), truth, s1e)
+
+    gs = {t: score(t) for t in grid}
+    g = max(gs, key=gs.get)
+    segs = (qinfo.select(pl.concat_str([pl.col(c).cast(pl.Utf8) for c in SEG_COLS], separator="|"))
+                 .to_series().unique().to_list())
+    thr = {s: g for s in segs}
+    thr["default"] = g
+    best = gs[g]
+    for _ in range(2):
+        for s in segs:
+            for t in grid:
+                cand = dict(thr, **{s: t})
+                sc = score(cand)
+                if sc > best + 1e-6:
+                    best, thr = sc, cand
+    return thr, best, (g, gs[g])
+
+
+# ---------------------------------------------------------------- train
+def train(tag):
+    s1, t, qmap = train_meta(tag)
+    qinfo = pl.read_parquet(os.path.join(pairs_dir(tag), "q.parquet")).drop("country")
+    files = chunk_files(tag)
+    rate = SAMPLE_RATE.get(tag, 0.1)
+    s1e = s1.filter("is_eval").select("s")
+    te = t.join(s1e, on="s")
+    log(f"train {tag}: {len(files)} chunk files, eval S1 {s1e.height}, eval true pairs {te.height}")
+
+    # ---- stage 1: training sample
+    parts = [attach(pl.read_parquet(f), qmap, rate) for f in files]
+    S = pl.concat(parts)
     del parts
-    tmap = dict(zip(tr["q_id"], tr["s1_id"]))
-    qfold = {qq: _h(s) for qq, s in tmap.items()}
-    P = P.with_columns(
-        label=(pl.col("q_id").replace_strict(tmap, default="") == pl.col("s_id")),
-        fold=pl.col("q_id").map_elements(lambda x: qfold.get(x, _h(x)), return_dtype=pl.Int8))
-    n_true, n_found = tr.height, int(P["label"].sum())
-    log(f"BLOCKING: {P.height} pairs, {P.height / q.height:.1f} per S2/S3 row, "
-        f"recall ceiling {n_found / n_true:.4f} ({n_found}/{n_true})")
-    for flag in ("from_name", "from_addr"):
-        log(f"   recall from {flag} alone: {P.filter(pl.col(flag) & pl.col('label')).height / n_true:.4f}")
-    P.write_parquet(os.path.join(WORK, "dev_pairs.parquet"))
-
-    true_map = {}
-    for s, qq in tr.iter_rows():
-        true_map.setdefault(s, set()).add(qq)
-    s1_ids = list(ids)
-
-    # simple rule baseline: best candidate by name+address token-set similarity
-    base = P.select("q_id", "s_id", prob=(pl.col("n_tset") + pl.col("a_tset")) / 200)
-    (bt, bs), _ = tune(base, true_map, s1_ids)
-    log(f"RULE BASELINE macro F0.5 = {bs:.4f} at threshold {bt}")
-
-    oof = np.zeros(P.height, np.float32)
-    rng = np.random.default_rng(0)
+    log(f"stage-1 sample: {S.height} rows, positives {int(S['label'].sum())}")
+    models1 = []
     for f in range(N_FOLDS):
-        trn = P.filter(pl.col("fold") != f)
-        if trn.height > TRAIN_ROWS:
-            trn = trn.sample(TRAIN_ROWS, seed=f)
-        m = lgb.train(PARAMS, lgb.Dataset(Xmat(trn), trn["label"].to_numpy()), ROUNDS)
-        mask = (P["fold"] == f).to_numpy()
-        oof[mask] = m.predict(Xmat(P.filter(pl.col("fold") == f)))
-        log(f"fold {f} done")
-    P = P.with_columns(prob=pl.Series(oof))
-    (t, s), res = tune(P.select("q_id", "s_id", "prob"), true_map, s1_ids)
-    log(f"LIGHTGBM OOF macro F0.5 = {s:.4f} at threshold {t}")
-    log("  threshold curve:", res)
-    # oracle: perfect model on these candidates (upper bound given blocking)
-    orc = P.filter("label").select("q_id", "s_id", prob=pl.lit(1.0))
-    log(f"  upper bound with this blocking (perfect model): {macro_f05(decide(orc, 0.5), true_map, s1_ids):.4f}")
+        tr = S.filter(pl.col("fold") != f)
+        models1.append(lgb.train(PARAMS1, lgb.Dataset(X(tr, FEATURES), tr["label"].to_numpy()), ROUNDS1))
+        log(f"stage-1 fold {f} trained on {tr.height}")
+    imp = sorted(zip(FEATURES, sum(m.feature_importance("gain") for m in models1)), key=lambda x: -x[1])
+    log("stage-1 top features:", [(a, int(b)) for a, b in imp[:20]])
+    del S, tr
 
-    trn = P.sample(min(TRAIN_ROWS, P.height), seed=42)
-    m = lgb.train(PARAMS, lgb.Dataset(Xmat(trn), trn["label"].to_numpy()), ROUNDS)
-    m.save_model(os.path.join(WORK, "model.txt"))
-    imp = sorted(zip(FEATURES, m.feature_importance("gain")), key=lambda x: -x[1])
-    log("top features:", [(a, int(b)) for a, b in imp[:15]])
-    json.dump({"threshold": t, "oof_f05": s, "baseline_f05": bs, "frac": frac,
-               "recall_ceiling": n_found / n_true, "pairs_per_q": P.height / q.height},
-              open(os.path.join(WORK, "dev_result.json"), "w"), indent=1)
+    # ---- stage 1: OOF over every pair; keep top-K per q
+    base, found, npairs = [], 0, 0
+    evs = s1e["s"]
+    for fpath in files:
+        p = attach(pl.read_parquet(fpath), qmap)
+        npairs += p.height
+        found += int(p.filter(pl.col("label") & pl.col("s").is_in(evs)).height)
+        p1 = np.zeros(p.height, np.float32)
+        fold = p["fold"].to_numpy()
+        for f in range(N_FOLDS):
+            m = fold == f
+            if m.any():
+                p1[m] = models1[f].predict(X(p.filter(pl.Series(m)), FEATURES))
+        p = p.with_columns(p1=pl.Series(p1))
+        base.append(topk(p))
+    B = pl.concat(base)
+    del base
+    nq = qinfo.height
+    log(f"pairs {npairs} ({npairs / nq:.1f} per S2/S3 row); recall ceiling on eval S1: {found / te.height:.4f}")
+    th1, sc1, (g1, gs1) = tune(B, "p1", te, s1e, qinfo)
+    log(f"STAGE-1 OOF macro F0.5: global t={g1} -> {gs1:.4f}; segment thresholds -> {sc1:.4f}")
+
+    # ---- stage 2
+    B = stage2_features(B, qinfo)
+    cols2 = FEATURES + S2FEATS
+    p2 = np.zeros(B.height, np.float32)
+    models2 = []
+    for f in range(N_FOLDS):
+        tr = B.filter((pl.col("fold") != f) & pl.col("eligible"))
+        m = lgb.train(PARAMS2, lgb.Dataset(X(tr, cols2), tr["label"].to_numpy()), ROUNDS2)
+        models2.append(m)
+        msk = (B["fold"] == f).to_numpy()
+        p2[msk] = m.predict(X(B.filter(pl.Series(msk)), cols2))
+        log(f"stage-2 fold {f} trained on {tr.height}")
+    B = B.with_columns(p2=pl.Series(p2))
+    imp2 = sorted(zip(cols2, sum(m.feature_importance("gain") for m in models2)), key=lambda x: -x[1])
+    log("stage-2 top features:", [(a, int(b)) for a, b in imp2[:15]])
+    th2, sc2, (g2, gs2) = tune(B, "p2", te, s1e, qinfo)
+    log(f"STAGE-2 OOF macro F0.5: global t={g2} -> {gs2:.4f}; segment thresholds -> {sc2:.4f}")
+    log("segment thresholds:", th2)
+
+    md = os.path.join(WORK, "models", tag)
+    os.makedirs(md, exist_ok=True)
+    for i, m in enumerate(models1):
+        m.save_model(os.path.join(md, f"s1_f{i}.txt"))
+    for i, m in enumerate(models2):
+        m.save_model(os.path.join(md, f"s2_f{i}.txt"))
+    res = {"tag": tag, "recall_ceiling": found / te.height, "pairs_per_q": npairs / nq,
+           "stage1_global": [g1, gs1], "stage1_seg": sc1, "stage2_global": [g2, gs2], "stage2_seg": sc2,
+           "thresholds": th2, "use_stage2": sc2 >= sc1}
+    json.dump(res, open(os.path.join(md, "result.json"), "w"), indent=1)
+    B.select("q", "s", "p1", "p2", "label", "fold").write_parquet(os.path.join(md, "oof.parquet"))
+    log("saved", md, res)
 
 
-def test():
-    cfg = json.load(open(os.path.join(WORK, "dev_result.json")))
-    m = lgb.Booster(model_file=os.path.join(WORK, "model.txt"))
-    s1 = load("test", 1)
-    q = pl.concat([load("test", k) for k in (2, 3)])
+# ---------------------------------------------------------------- predict
+def predict(model_tag, test_tag):
+    md = os.path.join(WORK, "models", model_tag)
+    res = json.load(open(os.path.join(md, "result.json")))
+    m1 = [lgb.Booster(model_file=os.path.join(md, f"s1_f{i}.txt")) for i in range(N_FOLDS)]
+    m2 = [lgb.Booster(model_file=os.path.join(md, f"s2_f{i}.txt")) for i in range(N_FOLDS)]
+    d = pairs_dir(test_tag)
+    s1 = pl.read_parquet(os.path.join(d, "s1.parquet"))
+    qinfo = pl.read_parquet(os.path.join(d, "q.parquet")).drop("country")
     os.makedirs(OUT, exist_ok=True)
-    match_rows, cand_rows = [], []
-    for c in s1["country"].unique().to_list():
-        log(f"country {c}")
-        saved = os.path.join(WORK, f"test_pairs_{c}.parquet")   # resume: finished countries are not recomputed
-        if os.path.exists(saved):
-            P = pl.read_parquet(saved)
-        else:
-            kept = []
-
-            def on_chunk(p):
-                kept.append(p.select(q_id="entity_id", s_id="entity_id_s",
-                                     prob=pl.Series(m.predict(Xmat(p)), dtype=pl.Float32)))
-
-            country_pairs(s1.filter(pl.col("country") == c), q.filter(pl.col("country") == c), on_chunk)
-            P = pl.concat(kept)
-            del kept
-            P.write_parquet(saved)
-        cand_rows.append(P.group_by("s_id").agg(pl.col("q_id").unique().sort().str.join(",")))
-        best = (P.sort("prob", descending=True).unique("q_id", keep="first")
-                 .filter(pl.col("prob") >= cfg["threshold"]))
-        match_rows.append(best.group_by("s_id").agg(pl.col("q_id").sort().str.join(",")))
-        log(f"  {c}: {P.height} candidate pairs, {best.height} matches")
-        del P, best
-    ids = s1.select(source1_entity_id="entity_id")
-    for rows, name, col in ((match_rows, "matching_results.tsv", "matched_entity_ids"),
-                            (cand_rows, "candidate_pairs.tsv", "candidate_entity_ids")):
-        agg = pl.concat(rows).rename({"s_id": "source1_entity_id", "q_id": col})
-        out = ids.join(agg, on="source1_entity_id", how="left").with_columns(pl.col(col).fill_null(""))
+    base, cands = [], []
+    for c in s1["country"].unique().sort().to_list():
+        pairs = []
+        for fpath in sorted(glob.glob(os.path.join(d, f"{c}_*.parquet"))):
+            p = pl.read_parquet(fpath)
+            p = p.with_columns(p1=pl.Series(np.mean([m.predict(X(p, FEATURES)) for m in m1], axis=0), dtype=pl.Float32))
+            base.append(topk(p))
+            pairs.append(p.select("s", "q"))
+        P = pl.concat(pairs)
+        cands.append(P.group_by("s").agg(pl.col("q").unique().sort()))
+        log(f"{c}: {P.height} candidate pairs")
+        del P, pairs
+    B = stage2_features(pl.concat(base), qinfo)
+    cols2 = FEATURES + S2FEATS
+    B = B.with_columns(p2=pl.Series(np.mean([m.predict(X(B, cols2)) for m in m2], axis=0), dtype=pl.Float32))
+    prob = "p2" if res["use_stage2"] else "p1"
+    thr = res["thresholds"] if res["use_stage2"] else res["stage1_global"][0]
+    M = decide(B, prob, thr, qinfo)
+    B.select("q", "s", "p1", "p2").write_parquet(os.path.join(WORK, f"test_scores_{model_tag}.parquet"))
+    ids = s1.select("s", source1_entity_id="s1_id")
+    for df, name, col in ((M.group_by("s").agg(pl.col("q").sort()), "matching_results.tsv", "matched_entity_ids"),
+                          (pl.concat(cands), "candidate_pairs.tsv", "candidate_entity_ids")):
+        df = df.with_columns(pl.col("q").list.eval(int_to_id("")).list.join(",").alias(col)).select("s", col)
+        out = ids.join(df, on="s", how="left").with_columns(pl.col(col).fill_null("")).select("source1_entity_id", col)
         out.write_csv(os.path.join(OUT, name), separator="\t", quote_style="never")
         log(f"wrote {name}: {out.height} rows, {(out[col] != '').sum()} non-empty")
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "dev":
-        dev(float(sys.argv[2]) if len(sys.argv) > 2 else 0.1)
-    else:
-        test()
+    cmd = sys.argv[1]
+    if cmd == "build":
+        build(sys.argv[2], sys.argv[3], float(sys.argv[4]) if len(sys.argv) > 4 else None)
+    elif cmd == "train":
+        train(sys.argv[2])
+    elif cmd == "predict":
+        predict(sys.argv[2], sys.argv[3])

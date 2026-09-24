@@ -1,0 +1,151 @@
+[00:00] Welcome to the Amazon ML Challenge 2026.
+[00:03] This year's problem is business entity resolution,
+[00:06] a fundamental and widely encountered problem
+[00:08] in real world data.
+[00:10] You will be given business records
+[00:11] that arrive from three independent sources,
+[00:14] each noisy and inconsistent,
+[00:16] and the goal is to determine which of them
+[00:18] describe the same real world business.
+[00:21] In this video, I will walk you through
+[00:22] the problem statement, the data set,
+[00:25] the scoring, the submission format,
+[00:27] and how entries are judged.
+[00:29] Let's start with where this data comes from.
+[00:32] Consider a business signing up on Amazon Business.
+[00:35] At signup, we capture its core details,
+[00:37] such as the business name and address.
+[00:40] To build a richer picture of that same business,
+[00:42] we pull in additional information from other data providers.
+[00:45] Each of these sources typically comes
+[00:47] from a different data vendor,
+[00:49] with its own formats and conventions.
+[00:51] The difficulty is that these external sources
+[00:53] share no common identifier with ours,
+[00:56] so the only fields we can rely on
+[00:58] are the business name and address.
+[00:59] For this challenge, we have deliberately limited
+[01:02] the data to names and addresses.
+[01:05] Here is the core difficulty.
+[01:06] The same real world business
+[01:08] is described differently by each source.
+[01:10] One vendor may write Acme Robotics Incorporated,
+[01:13] another abbreviates the address,
+[01:15] and a third references a nearby landmark.
+[01:18] Source one is our clean,
+[01:19] deduplicated reference list.
+[01:21] Sources two and three are the noisy fragments
+[01:24] that must be reconciled against it,
+[01:26] and there is no shared identifier linking them.
+[01:29] Entity resolution is the task
+[01:31] of linking these records together,
+[01:33] establishing that differently written records
+[01:35] all refer to the same business.
+[01:37] For every entity in source one,
+[01:39] the goal is to find all of its matching records
+[01:42] in sources two and three.
+[01:44] A source one entity may match many records,
+[01:46] exactly one, or none at all.
+[01:49] Comparing every source one record
+[01:51] against every source two and source three record
+[01:54] would be far too expensive at scale.
+[01:56] So we first apply blocking,
+[01:58] sorting records into buckets using a cheap key
+[02:00] built from both the name and the address,
+[02:03] so that records likely to match land in the same bucket.
+[02:06] Each color here is one such block.
+[02:08] Notice that every record carries its own id,
+[02:11] a noisy name, and an address,
+[02:13] and records can group either through a similar name
+[02:15] or through a shared address.
+[02:17] We follow the orange block,
+[02:18] built around Acme Robotics,
+[02:20] and the records in it
+[02:21] become the candidate matches for that entity.
+[02:24] Blocking favors recall,
+[02:26] so the bucket also pulls in lookalikes,
+[02:28] a business with a similar name at a different address
+[02:31] and a different business that happens to share an address.
+[02:34] The matching model removes those in the next step.
+[02:37] Blocking narrows an enormous number of possible comparisons
+[02:40] down to a manageable set of candidate pairs.
+[02:43] Finally, a matching model scores each candidate pair
+[02:47] and keeps only the true matches, discarding the rest.
+[02:50] That produces the two outputs of this challenge.
+[02:53] The candidate pairs from your blocking stage
+[02:55] and the final matching results,
+[02:57] which is the file scored on the leaderboard.
+[03:00] You are provided with two datasets.
+[03:02] The training set contains records across all three sources
+[03:06] together with the ground truth labels,
+[03:08] a file that specifies for each source one business
+[03:11] exactly which source two and source three
+[03:13] records it matches.
+[03:15] The test set contains the same three sources,
+[03:17] but no labels,
+[03:18] and this is what you generate predictions for.
+[03:21] A note on the label format.
+[03:22] The ground truth is stored as one row per source one entity.
+[03:26] It's ID may tee to a comma separated list
+[03:29] of all of its matching IDs,
+[03:30] so a single row carries that entity's complete match set
+[03:34] and the list is empty when the entity matches nothing.
+[03:37] This mirrors exactly what you submit.
+[03:39] One practical reminder,
+[03:41] all files are tab separated,
+[03:43] so read them with an explicit tab separator,
+[03:45] otherwise the columns will not parse correctly.
+[03:49] There are two deliverables.
+[03:50] Throughout the challenge,
+[03:52] you upload a single file matching underscore results.tsv
+[03:56] containing one row per source one entity
+[03:58] with its predicted matches.
+[04:00] This is the only file scored on the leaderboard.
+[04:02] At the close of the challenge,
+[04:04] every team also submits a single archive.
+[04:07] It contains the final matches
+[04:09] along with candidate underscore pairs.tsv.
+[04:12] The candidate set your blocking stage
+[04:13] produced before the model narrowed it down.
+[04:16] This file is not scored,
+[04:18] but it is used to audit the quality of your blocking.
+[04:20] The archive also includes your complete runnable pipeline
+[04:24] and a methodology document describing your approach.
+[04:27] The packages of the top teams are reviewed in detail
+[04:29] before final rankings are confirmed.
+[04:32] One reminder,
+[04:33] run the provided validation script before submitting,
+[04:36] so a simple formatting error does not cost you a submission.
+[04:40] Finally, how entries are judged.
+[04:42] Submissions are scored using the macro F0.5 metric,
+[04:46] which weights precision twice as heavily as recall.
+[04:48] In practical terms,
+[04:50] incorrectly merging two different businesses
+[04:52] is penalized roughly twice as much as missing a true match.
+[04:56] So when in doubt,
+[04:57] it is safer not to merge.
+[04:58] A few recommendations.
+[05:00] First, understand singletons.
+[05:02] A singleton is a source one entity
+[05:04] that has no matching record in source two or source three.
+[05:08] If you correctly predict an empty list for it,
+[05:10] you earn a full score of one on that entity.
+[05:13] If you predict any match, you score zero.
+[05:15] So identifying the businesses with no match
+[05:18] is just as important as finding the ones that do match.
+[05:21] Second, your blocking strategy sets the ceiling
+[05:24] on the recall you can achieve.
+[05:26] So invest in it first
+[05:27] because you cannot match a record you never consider.
+[05:30] And third, pay attention to region-specific patterns
+[05:33] in both names and addresses.
+[05:35] One firm rule.
+[05:36] This is a pure machine learning challenge,
+[05:39] so external databases, APIs, and lookups
+[05:42] are strictly prohibited.
+[05:44] Use only the provided data.
+[05:46] That is the challenge.
+[05:47] Build something you are proud of,
+[05:49] resolve those entities, and enjoy the process.
+[05:52] We are excited to see what you create.
+[05:54] All the best.

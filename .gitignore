@@ -1,0 +1,19 @@
+# data and large artefacts (never commit competition data or outputs)
+student_resource/dataset/
+2026_official/*.zip
+2026_official/*.mp4
+work/
+output/
+submissions/*.tsv
+*.parquet
+*.tsv
+*.zip
+# python / tools
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+*.key
+.claude/
+__MACOSX/
+.DS_Store

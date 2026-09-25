@@ -172,6 +172,14 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 - Decision: drop test-like training. v6a (built on it) not uploaded. v6 rebuilt on FULL data (v3 base) + consensus
   features + calibration + France cleaning.
 
+### v6 on FULL data (25 Sep 20:50-21:40)
+| Change (FULL validation, same as v3) | Held-out macro F0.5 | Decision |
+|---|---|---|
+| v3 (reference) | 0.98015 | LB 0.9700 |
+| + consensus stage-2 features (LightGBM stage 1 of v3, XGBoost stage 2) | 0.98151 (+0.0014); `cons_num_share` is the 3rd most important stage-2 feature | **v6** |
+| + calibration, per-country rule | 0.98173 (+0.0002 more) | left out: on test it adds ~56k borderline matches (p2 0.4-0.5), the band where test has 2x train's look-alike share |
+| v6 = consensus + v3's rule (expected-F0.5, floor 0.3, raw p2) + France from the cleaned rebuild | - | 1,635,015 S1 rows with matches; matched records vs v3: US 2.261M (+20k), India 2.746M (+39k), France 0.908M (+19k) |
+
 ## Lessons (read before changing anything)
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.

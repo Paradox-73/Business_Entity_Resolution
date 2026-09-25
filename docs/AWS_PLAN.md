@@ -42,10 +42,10 @@
 `rerank.py` = a transformer (mDeBERTa-v3-base, MIT) reads the two records' text together and rescores only the
 "close calls" (top-2 candidates of rows whose best probability is between 0.01 and 0.995, or whose 2nd candidate
 has stage-1 probability >= 0.2). A small XGBoost (stage 3) combines it with the GBDT probabilities.
-Extra uploads: `work/models/tlike_xgb_sib/oof.parquet`, `work/test_scores_tlike_xgb_sib.parquet` (v4), `work/train_s{1,2,3}.parquet`, `work/test_s{1,2,3}.parquet`.
+Extra uploads: `work/models/full_cons/oof.parquet`, `work/test_scores_full_cons.parquet` (v6 base; France rows there use the old cleaning — the laptop merges France from test_scores_full_cons_testfr.parquet), `work/train_s{1,2,3}.parquet`, `work/test_s{1,2,3}.parquet`.
 ```bash
 pip install sentencepiece protobuf xgboost==2.0.3   # 2.0.3 = same version as the laptop
-python rerank.py select tlike_xgb_sib   # minutes; prints how many close calls
+python rerank.py select full_cons   # minutes; prints how many close calls
 python rerank.py train                  # ~1 h on A10G (bf16)
 python rerank.py score                  # ~30-40 min
 python rerank.py stage3                 # prints held-out macro F0.5 GBDT vs +transformer per threshold -> tell Claude

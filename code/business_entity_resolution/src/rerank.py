@@ -352,6 +352,58 @@ def stage3():
     log(f"wrote {dst} ({te.height} rows; {tt.height} S2/S3 rows re-scored); rule {kn} -> rule{tagx}.json")
 
 
+def check(md, tag):
+    """Does the transformer gain hold on another labelled split (tl2 = train split at test density)?
+    Needs WORK/models/<md>/oof_<tag>.parquet (evaluate.py with BER_EVAL_SAVE=1). Side a only (transformer A never
+    trained on pairs of eval-half S1 rows). Close calls whose candidates are all eval-half S1 rows; transformer A
+    scores reused from OUT/train_ce.parquet where the pair was scored before, the rest scored now; stage 3 for fold f
+    is fitted on FULL's side-a rows of the other folds, so no row's own label reaches its score."""
+    import xgboost as xgb
+    params = dict(tree_method="hist", device="cuda", objective="binary:logistic", eta=0.05, max_depth=6,
+                  min_child_weight=20, subsample=0.8, colsample_bytree=0.9, seed=7)
+    b = pl.read_parquet(os.path.join(WORK, "models", md, f"oof_{tag}.parquet")).with_columns(
+        pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+    s1 = pl.read_parquet(os.path.join(WORK, "train_s1.parquet"), columns=["entity_id", "country"]).select(
+        s=id_to_int("entity_id"), h=half("entity_id"), country="country")
+    rows = close_calls(b).join(s1.select("s", "h"), on="s").filter(pl.col("h").max().over("q") < 500)
+    known = pl.read_parquet(os.path.join(OUT, "train_ce.parquet"), columns=["q", "s", "ce"]).with_columns(
+        pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64)).join(rows.select("q", "s"), on=["q", "s"])
+    dst = os.path.join(OUT, f"check_{tag}_ce.parquet")
+    new_sc = pl.read_parquet(dst) if os.path.exists(dst) else None
+    todo = rows.select("q", "s").join(known.select("q", "s"), on=["q", "s"], how="anti")
+    if new_sc is None or new_sc.height != todo.height:
+        c = _pairs(todo, "train")
+        new_sc = c.select("q", "s").with_columns(ce=pl.Series(Scorer()(c["tq"].to_list(), c["ts"].to_list())))
+        new_sc.write_parquet(dst)
+    log(f"{tag} close calls (eval half): {rows.height} pairs, {known.height} scores reused, {new_sc.height} scored now")
+    r = _s3_features(rows.join(pl.concat([known, new_sc]), on=["q", "s"], how="left"))
+    full = _s3_features(pl.read_parquet(os.path.join(OUT, "train_ce.parquet")))
+    p3 = np.zeros(r.height, np.float32)
+    for f in range(3):
+        tr = full.filter(pl.col("fold") != f)
+        mdl = xgb.train(params, xgb.DMatrix(tr.select(S3FEATS).to_numpy(), tr["label"].to_numpy()), 300)
+        msk = (r["fold"] == f).to_numpy()
+        p3[msk] = mdl.predict(xgb.DMatrix(r.filter(pl.Series(msk)).select(S3FEATS).to_numpy()))
+    r = r.with_columns(p3=pl.Series(p3))
+    touched = r.select("q").unique().with_columns(t=pl.lit(True))
+    new = (b.select("q", "s", "p2").join(r.select("q", "s", "p3"), on=["q", "s"], how="left").join(touched, on="q", how="left")
+             .with_columns(p2n=pl.when(pl.col("t").is_null()).then(pl.col("p2")).otherwise(pl.col("p3").fill_null(0.0))))
+    ev = pl.read_parquet(os.path.join(WORK, "pairs", tag, "s1.parquet"), columns=["s"]).with_columns(
+        pl.col("s").cast(pl.Int64)).join(s1, on="s").filter(pl.col("h") < 500)
+    truth = read_truth().select(s=id_to_int("s1_id"), q=id_to_int("q_id"))
+    out = {}
+    for c in ["all"] + ev["country"].unique().sort().to_list():
+        ss = (ev if c == "all" else ev.filter(pl.col("country") == c)).select("s")
+        tr_ = truth.join(ss, on="s")
+        g, n_ = _decisions(new, "p2", tr_, ss), _decisions(new, "p2n", tr_, ss)
+        kg, kn = max(g, key=g.get), max(n_, key=n_.get)
+        k65 = json.dumps({"type": "thr", "t": 0.65, "prob": "p2"})
+        out[c] = {"gbdt_best": [kg, g[kg]], "ce_best": [kn, n_[kn]], "ce_thr065": n_[k65]}
+        log(f"CHECK {tag} {md} {c} ({ss.height} eval S1): GBDT {g[kg]:.5f} ({kg}) -> with transformer {n_[kn]:.5f} ({kn}); "
+            f"thr 0.65 {n_[k65]:.5f}")
+    json.dump(out, open(os.path.join(OUT, f"check_{md}_{tag}.json"), "w"), indent=1)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     cmd = sys.argv[1]
@@ -363,3 +415,5 @@ if __name__ == "__main__":
         score()
     elif cmd == "stage3":
         stage3()
+    elif cmd == "check":
+        check(sys.argv[2], sys.argv[3])

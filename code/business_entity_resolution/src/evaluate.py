@@ -67,6 +67,8 @@ def main(tag, dirs):
             m = fold == f
             p2[m] = score(m2[f], X(B.filter(pl.Series(m)), cols2))
         B = B.with_columns(p2=pl.Series(p2))
+        if os.environ.get("BER_EVAL_SAVE") and not os.environ.get("BER_EVAL_SMOKE"):   # for rerank.py check
+            B.select("q", "s", "p1", "p2", "label", "fold").write_parquet(os.path.join(md, f"oof_{tag}.parquet"))
         prob = "p2" if res.get("use_stage2", True) else "p1"
         M = apply_decision(B, prob, res["decision"], qinfo)
         out = {"all": macro_f05_df(M, te, s1e.select("s"))}

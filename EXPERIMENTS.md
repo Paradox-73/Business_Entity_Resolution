@@ -125,6 +125,13 @@ Next ideas, ranked by expected gain / cost:
 
 Implications: (1) the look-alike share is the main measurable difference; (2) US density differs; (3) France does not look worse than the others on any measurable statistic.
 
+### Fable review checks (25 Sep 19:10)
+- Check 3, ID leak: Spearman(S1 id number, matched id number) = 0.0003; sibling S2 ids are ~165M apart (median). No leak.
+- Check 5, per-source cap: matches per (S1, source) = 1: 1.51M, 2: 1.32M, 3: 0.71M, 4: 0.26M, 5: 59.5k, 6: 2.8k. No useful cap.
+- Check 6, calibration of v3 p2 (best candidate per record): under-confident in the middle (predicted 0.45 -> actual 0.56; 0.15 -> 0.23; 0.86 -> 0.92). Isotonic calibration before the expected-F0.5 rule is worth testing (calibrate on test-like OOF).
+- Check 4 (test look-alikes = train businesses?): pending, needs RAM after v4 training.
+- Forum rules (25 Sep): hand-written normalisation dictionaries, unsupervised stats on test, self-training allowed; libpostal/gazetteers/APIs not allowed. Plan in docs/AWS_PLAN.md.
+
 ## Lessons (read before changing anything)
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
 - A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.

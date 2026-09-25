@@ -1,6 +1,6 @@
 # AMLC 2026 — Business Entity Resolution: full record of what was done
 
-Updated 25 Sep 2026, ~18:15 IST. Written for cross-checking: every step, setting, number and known risk.
+Updated 25 Sep 2026, ~22:15 IST (after all five day-1 uploads). Written for cross-checking: every step, setting, number and known risk.
 Sources for numbers: `EXPERIMENTS.md` (Appendix E), `submissions/LOG.md` (Appendix F), logs in `work/`.
 The official problem statement, rules and video transcript are copied **word for word** in Appendices A–D.
 
@@ -17,16 +17,20 @@ The official problem statement, rules and video transcript are copied **word for
 
 ## 1. Status
 
-| Version | What it contains | OOF | LB | Uploaded |
+| Version | What it contains | Held-out score (validation) | LB | Uploaded |
 |---|---|---|---|---|
 | v1 | first pipeline (broken shortlist at full size) | 0.9753 (10% slice, optimistic) | — | no (team decision) |
-| v2 | fixed shortlist + two-stage LightGBM + expected-F0.5 decision | 0.97904 | **0.9677** | yes |
-| v3 | v2 + 6 "sibling" features in stage 2 (stage 2 on GPU XGBoost) | 0.98015 | **0.9700** | yes |
-| v4 | stage 1 as deeper GPU XGBoost | stage 1: 0.9720 (LightGBM stage 1: 0.9724) | — | not built (run stopped by low memory; question already answered: no capacity gain) |
-| v5 | v3 with every France row emptied (measurement probe) | — | pending | file ready |
-| LB leader | — | — | 0.9841 | — |
+| v2 | fixed shortlist + two-stage LightGBM + expected-F0.5 decision | 0.97904 (FULL) | **0.9677** | yes |
+| v3 | v2 + 6 "sibling" features in stage 2 (stage 2 on GPU XGBoost) | 0.98015 (FULL) | **0.9700** (best so far) | yes |
+| v4a | stage 1 as deeper GPU XGBoost | 0.98005 (FULL) | — | no (no gain on held-out) |
+| v5 | v3 with every France row emptied (measurement probe) | — | **0.838** → France ≈ 0.937, US+India ≈ 0.976 | yes |
+| v4 | trained on "test-like" data made by deleting pairs of dropped S1 rows (see §5.6) | 0.9775 (test-like, not comparable) | **0.9614** (−0.0086) | yes |
+| v6a | v4 + consensus features + calibration + France cleaning | 0.97966 (test-like) | — | no (built on v4's broken base) |
+| v6 | v3 base (FULL data) + consensus stage-2 features + France rows from French-cleaned rebuild | 0.98151 (FULL) | **0.9673** (−0.0027) | yes |
+| v7 | PROBE: v6 US/India rows + v3 France rows | 0.98151 (FULL) | ready for 26 Sep | — |
+| LB leader | — | — | ~0.984–0.987 | — |
 
-Submissions used on day 1: 2 of 5 (v2, v3).
+Submissions used on day 1: 5 of 5 (v2, v3, v5, v4, v6). Best LB so far: **v3, 0.9700**.
 
 ---
 
@@ -116,6 +120,10 @@ TF-IDF cosines (name char-3-gram, address char-3-gram, address words, name+addre
 | + expected-F0.5 decision = **v2** | full | 0.985 | **0.9790** (LB 0.9677) |
 | + sibling features = **v3** | full | 0.985 | **0.9802** (LB 0.9700) |
 | Stage 1 as deeper GPU XGBoost (depth 10, 1000 rounds) | full | 0.985 | 0.9720 at stage 1 (vs 0.9724) |
+| Training on "test-like" data made by deleting pairs (v4) | test-like (flawed) | 0.984 | 0.9775 there; **LB 0.9614** |
+| v3 + consensus features (agreement with all records pointing at the S1) | full | 0.985 | **0.98151** (+0.0014) |
+| + calibration (isotonic) and per-country rule | full | 0.985 | 0.98173 (+0.0002; not used, see §7) |
+| Self-training on test pseudo-labels | test-like | — | 0.97921 vs 0.97926 without (not used) |
 
 ---
 
@@ -125,6 +133,9 @@ TF-IDF cosines (name char-3-gram, address char-3-gram, address words, name+addre
 3. **CPU instead of GPU**: trees were trained and applied on CPU LightGBM for most of the day. XGBoost 2.0.3 (last version working with the laptop's CUDA 11.6 driver) now runs on the GPU (~8× faster scoring).
 4. **Memory**: GPU (4 GB) cannot hold the 11.5M-row sample for one model → use 3 fold models; RAM (16 GB) → never run two big jobs together.
 5. **Interrupted runs**: a session restart killed the test build → builds resume per chunk; stage-1 results cached.
+6. **Fake test-like data (v4, −0.0086 LB)**: to mimic test's lower US density, `testlike.py` deleted the candidate pairs of dropped S1 rows. Records then had 15.9 candidates (US) instead of the 31.3 they have on test, because a real search refills the list with other S1 rows. The model learned on distorted candidate-count, rank and margin features, and its held-out score could not show it (same distortion). Fix: `testlike_build.py` drops S1 rows **before** the search (tl2, building 25 Sep night). Rule: compare every candidate-list feature with test before training on resampled data.
+7. **Two changes in one upload (v6)**: consensus features (US/India) and France cleaning went up together, LB fell 0.0027, and the cause cannot be assigned. v7 (v6 US/India + v3 France) separates them. Rule: one change per upload unless both are validated on data that tracks the LB.
+8. **Held-out gains did not reach the LB twice** (v4, v6). The FULL held-out set does not look like test (fewer look-alikes per S1, 2× denser US S1). Rule: until tl2 is shown to rank v2 < v3 and v4 far below, a held-out gain alone is not enough to upload.
 
 ---
 
@@ -133,7 +144,14 @@ TF-IDF cosines (name char-3-gram, address char-3-gram, address words, name+addre
 - Simulation (`decoy_sim.py`): duplicating unmatched OOF records to the test rate lowers v2 OOF 0.9790 → **0.9773** only; re-tuning the decision gains +0.0002. → explains ~0.002 of the gap.
 - v3's sibling features (which target look-alikes) gained **2× more on LB than on OOF** → consistent with test having more look-alikes.
 - Unexplained ~0.008–0.009. **Main suspect: France** (15% of test, no labels). Arithmetic: France at ~0.92 and US/India at ~0.977 give ~0.968.
-- v5 measures it: France score ≈ (LB_v3 − LB_v5) / 0.15 + French singleton share (~0.05).
+- **v5 result (LB 0.838)**: France = 0.132 / 0.1497 + 0.056 ≈ **0.937** (0.934–0.941 with LB rounding); US+India = (0.970 − 0.1497 × 0.937) / 0.8503 ≈ **0.976**. So the gap is ~0.006 France + ~0.004 US/India.
+
+## 6c. France diagnosis (25 Sep 19:00–21:30)
+- France is not under- or over-matched: matches per S1 France 3.43, US 3.38, India 3.34 (train truth 3.46). Its uncertain band is not wider (8.5% vs US 8.8%). Its loss is confident mistakes.
+- France S1 has many near-twins: same generic name ("<city> <word> SARL") and street, differing only in legal form or house number. Records whose 2nd candidate also has p1 > 0.5: France 2.07%, US 0.39%.
+- France S2/S3 text differs from its S1 in ways the US-trained cleaning misses: dotted legal forms (s.a.r.l., ~5% of records), "et" for "&", street short forms (r., av., bd., all., imp., rte., ch., pl.), "N°" before numbers, departement names (Nord, Gironde, Loire-Atlantique) where S1 has region names.
+- Checked and ruled out: decoy name words (Holding, Participations…) are already rejected by the model (~1% matched); no Paris/Lyon/Marseille; 5-digit postcodes in 0.4% of addresses; test records are not copies of train S1 businesses (0.01%).
+- French cleaning rules written (`normalize.py` french=True, split `testfr`): changes 3.1% of France's matched pairs. In v6 together with consensus features: LB −0.0027 vs v3. v7 tells which of the two caused it.
 
 
 ## 6b. Test-side EDA (25 Sep 18:40) — what differs between train and test
@@ -152,22 +170,21 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 ## 7. Known risks and points to cross-check
 1. Stage 2 is trained on **OOF** stage-1 probabilities but applied on test to probabilities from a model trained on all data → possible calibration shift on test.
 2. Train S1 density (US 1.32M) differs from test (US 663k); features like chain count, number of candidates and margins may shift.
-3. Learned address short forms include US state codes that also hit French words ("de"→"delaware", "la"→"louisiana"). Applied to both sides consistently, but untested on France.
+3. Learned address short forms include US state codes that also hit French words ("de"→"delaware", "la"→"louisiana"). A French-specific cleaning was tried in v6 (result mixed with another change; v7 separates it).
 4. France: no labels; legal forms and street words (rue, bd, av) are not in the learned maps.
 5. The public LB is a subset of test; its size and France share are unknown (Google Form question).
 6. Stage-1 training sample is 33% positives (real rate ~2.5%) → stage-1 probabilities are not calibrated; stage 2 and the decision are tuned on OOF so this should be absorbed.
 7. Records with **no address** cause 65% of wrong-S1 errors and half of shortlist misses; chains make many of these ambiguous.
+8. Calibration: p2 is under-confident on train (0.45 → 58% true). Calibrating adds ~56k borderline matches on test, in the band where test has 2× train's look-alike share, so train's calibration probably overstates test. Not used until tl2 validates it.
 
 ---
 
-## 8. Next steps (each upload answers one question)
-| Ver | Changes only | Question | Decision rule |
-|---|---|---|---|
-| v5 (ready) | v3 with France emptied | how good is France? | France ≲ 0.93 → fix France; ≈ 0.97 → gap is US/India shift |
-| v6 | depends on v5: France fix, or retrain at test density / test-like look-alike rate | does it close the gap? | keep if LB up |
-| later | ensemble LightGBM + XGBoost stage 1; wider name search for records without address; GPU re-ranker for close calls | reach 0.99 | — |
-
----
+## 8. Next steps (26 Sep; details in `docs/AWS_PLAN.md`)
+1. **Fix validation first.** `tl2` = train S1 thinned to test counts BEFORE the search, look-alike records at test's rate, then the normal build (laptop overnight). Score the existing fold models on it out-of-fold (v2, v3, v4, v6 models). It is trustworthy only if it ranks them like the LB (v4 ≪ v2 < v3). Then every later change is validated on tl2, and calibration/decision are tuned there.
+2. **Upload v7** (v6 US/India + v3 France) → separates the consensus effect from the France cleaning. France keeps v3's rows unless v7 shows the cleaning was not the cause.
+3. **Overnight on the laptop GPU (small models)**, then AWS with base models if they gain: **reranker** (`rerank.py`, transformer reading both records, close calls only: 3.4M test pairs) → stage 3 on top of the GBDT; validated on tl2.
+4. **AWS GPU: retriever for every record** (`embed_all.py`) → 5th search → rebuild candidates (AWS many-core CPU) → retrain → aims at the 1.5% of true pairs never shortlisted.
+5. Expected by Sunday with all of the above: **0.975–0.98** (estimate); 0.99 would need US/India ≈ 0.99 and France ≈ 0.99, which none of the measured levers reaches alone.
 
 # Appendix A — Problem statement (verbatim, student_resource/README.md)
 
@@ -881,7 +898,63 @@ Next ideas, ranked by expected gain / cost:
 
 Implications: (1) the look-alike share is the main measurable difference; (2) US density differs; (3) France does not look worse than the others on any measurable statistic.
 
+#### Fable review checks (25 Sep 19:10)
+- Check 3, ID leak: Spearman(S1 id number, matched id number) = 0.0003; sibling S2 ids are ~165M apart (median). No leak.
+- Check 5, per-source cap: matches per (S1, source) = 1: 1.51M, 2: 1.32M, 3: 0.71M, 4: 0.26M, 5: 59.5k, 6: 2.8k. No useful cap.
+- Check 6, calibration of v3 p2 (best candidate per record): under-confident in the middle (predicted 0.45 -> actual 0.56; 0.15 -> 0.23; 0.86 -> 0.92). Isotonic calibration before the expected-F0.5 rule is worth testing (calibrate on test-like OOF).
+- Check 4 (test look-alikes = train businesses?): pending, needs RAM after v4 training.
+- Forum rules (25 Sep): hand-written normalisation dictionaries, unsupervised stats on test, self-training allowed; libpostal/gazetteers/APIs not allowed. Plan in docs/AWS_PLAN.md.
+
+#### v5 result and France diagnosis (25 Sep 19:00-19:30)
+- **v5 (v3 with every France S1 row emptied) LB 0.838.** Test S1: France 259,452 of 1,732,544 (15.0%). Train singleton share 5.6% in both countries.
+  France F0.5 = 0.132 / 0.1497 + 0.056 = **~0.937** (0.934-0.941 given LB rounding); US+India = (0.970 - 0.1497 x 0.937) / 0.8503 = **~0.976**.
+  So v3's OOF-LB gap (0.980 vs 0.970) is ~0.006 France + ~0.004 US/India (test density / look-alikes).
+- France is not under- or over-matched: predicted matches per S1 France 3.43, US 3.38, India 3.34 (train truth 3.46); S1 non-empty 94.8% vs 94.3% (train 94.4%).
+- France's best-candidate probability is not more uncertain: 0.05-0.5 band France 8.5%, US 8.8%, India 7.1%. Its loss is confident mistakes.
+- **France S1 twins**: same generic name ("<city> <word> SARL"), same street, differing only in legal form (SA/SAS/SARL/SASU) or house number. Share of records whose 2nd candidate also has p1 > 0.5: France 2.07%, US 0.39%.
+- France S2/S3 noise not handled by the US-trained cleaning (tokens in records but not in their confidently matched S1): dotted legal forms (s.a.s., s.a.r.l., e.u.r.l., s.a.s.u. ~5% of records), "et" for "&", street abbreviations r./av./ave/st./all./bd./blvd/imp./rte./crs/q./pl./ch./psg., "No"/"N°" before the number, departement names (Nord, Gironde, Loire-Atlantique, Pas-de-Calais) where S1 has region names.
+- Decoy name words are already handled: US records with Midtown/Northside/Greater/Eastgate are 0% true in train and the model gives p2 > 0.5 to 0.1%; France records with Participations/Holding/Distribution/International get p2 > 0.5 for 0.9-2.4%.
+- No Paris/Lyon/Marseille in France test (cities: Bordeaux, Nantes, Lille, Tourcoing, Dunkerque, Roubaix, Calais, Saint-Nazaire, Pessac, ...); 5-digit postcodes in 0.4% of S1 addresses.
+- **Check 4 (are test records copies of train S1 businesses?)**: 60k US test records: best train-S1 cosine >= 0.9 while best test-S1 < 0.6 for 0.00%; test S1 with a train S1 at cosine >= 0.9: 0.09%. No overlap -> the "empty records that belong to train businesses" idea is dropped.
+- Only India records have embedding features (non-Latin names); US and France both have none, so this is not France-specific.
+
+#### v4 = training on test-like conditions (25 Sep 18:59-19:25)
+`testlike.py`: US S1 kept at test density (50%), India 91.7%; look-alike records topped up to test's records-per-S1 (US 5.76, India 5.10). Same features, GPU XGBoost both stages + sibling features.
+- Held-out on the test-like setup: stage 1 0.9719, stage 2 0.9775, recall ceiling 0.9844; best rule plain threshold 0.55 (expected-F0.5 rule 0.9759 there). Not comparable with v3's 0.9802 (different validation data).
+- France cleaning rules written (`normalize.py` french=True, `prep.py france` -> split `testfr`), not yet used.
+
+#### v6 ingredients (25 Sep 20:00-20:25), all on the test-like validation (v4 base 0.97753)
+| Change | Held-out macro F0.5 | Decision |
+|---|---|---|
+| Calibration: isotonic map of p2 (cross-fitted by fold), then expected-F0.5 rule per country | 0.97757 -> 0.97811 (+0.0005); US 0.9793 -> 0.9797, India 0.9762 -> 0.9768 | keep (floor 0.4-0.5, alpha 1.0; France uses the pooled rule) |
+| p2 calibration check | p2 0.3-0.4 true 47.8%, 0.4-0.5 57.9%, 0.5-0.6 68.2%, 0.6-0.7 77.3%, 0.8-0.9 92.2% | p2 is under-confident, as in v3 |
+| Consensus stage-2 features (agreement with ALL rows pointing at the same S1 with p1 >= 0.5: mean/min name and address token-set, share/count with the same house number) | stage 2 at t=0.55: 0.9775 -> 0.9791; with expected-F0.5 rule 0.97926 (+0.0017) | keep |
+| France cleaning (French rules, testfr rebuild), v4 model | no labels; 3.1% of France matched pairs change (18,050 records lose a match, 27,283 gain one, 816 move); best p2 > 0.9: 59.0% -> 60.1% | LB only |
+| Self-training on test (1.03M pseudo-labelled test rows incl. 519k France, weight 0.5; validation adds each fold's own pseudo-labels) | 0.97921 vs 0.97926 without | **not used** (no gain on held-out; its test effect cannot be measured) |
+| Calibration refit on the consensus model | 0.97915 (thr 0.55) -> 0.97966 (US 0.9809, India 0.9786) | **v6** = consensus model + calibrated per-country rule + France from the cleaned rebuild; 1,637,900 S1 rows with matches (US 2.33M, India 2.76M, France 0.91M matched records) |
+
+Smoke tests for AWS (laptop GPU, tiny subsets): `embed_all.py` train/encode/search/eval and `rerank.py` select/train/score/stage3 run end to end.
+Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (3.43M pairs).
+
+#### v4 LB 0.961357 (25 Sep 20:50) — test-like training HURT (-0.0086 vs v3)
+- Cause (checked on data): `testlike.py` removed S1 rows by deleting their candidate pairs, so records kept only the
+  remaining candidates. Candidates per US record: full train 31.4, **test-like 15.9**, test 31.3; candidates with name
+  token-set >= 90: full 3.4, test-like 1.87, test 3.84 (India 30.1 / 27.5 / 30.1). The real search at lower density
+  refills each record's top-k with other S1 rows, so test looks like FULL train on these features, not like test-like.
+- The test-like held-out score (0.9775) could not see this: its validation rows have the same distortion.
+- Decision: drop test-like training. v6a (built on it) not uploaded. v6 rebuilt on FULL data (v3 base) + consensus
+  features + calibration + France cleaning.
+
+#### v6 on FULL data (25 Sep 20:50-21:40)
+| Change (FULL validation, same as v3) | Held-out macro F0.5 | Decision |
+|---|---|---|
+| v3 (reference) | 0.98015 | LB 0.9700 |
+| + consensus stage-2 features (LightGBM stage 1 of v3, XGBoost stage 2) | 0.98151 (+0.0014); `cons_num_share` is the 3rd most important stage-2 feature | **v6** |
+| + calibration, per-country rule | 0.98173 (+0.0002 more) | left out: on test it adds ~56k borderline matches (p2 0.4-0.5), the band where test has 2x train's look-alike share |
+| v6 = consensus + v3's rule (expected-F0.5, floor 0.3, raw p2) + France from the cleaned rebuild | - | 1,635,015 S1 rows with matches; matched records vs v3: US 2.261M (+20k), India 2.746M (+39k), France 0.908M (+19k) |
+
 ### Lessons (read before changing anything)
+- **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
 - A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.
 - A relative `max_df` makes search cost grow with S1 size; use an absolute document-frequency cap for **search**, but compute similarity **features** with the full vocabulary.
@@ -897,4 +970,9 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 | v1 | `v1_matching_results.tsv` | 25 Sep 03:02 | 0.9753 (10% train slice, 3-fold) | not submitted (team decision: broken full-density shortlist) | TF-IDF name+address shortlist (top 10 each, same country), 40 features, LightGBM, each S2/S3 row to its best S1 if prob >= 0.75 |
 | v2 | `submissions/v2/` | Fri 17:00 | 0.97904 (FULL OOF) | **0.9677** | two-stage LightGBM, word-level shortlist, expected-F0.5 decision (1633975 S1 rows with matches) |
 | v3 | `submissions/v3/` | Fri 17:15 | 0.98015 (FULL OOF) | **0.9700** | v2 + sibling-agreement features in stage 2 (GPU XGBoost stage 2) (1634819 S1 rows with matches) |
-| v5 | `submissions/v5/` | Fri 17:35 | 0.98015 (FULL OOF) | _upload & fill in_ | PROBE: v3 with all France rows emptied (measures France score) (1388739 S1 rows with matches) |
+| v5 | `submissions/v5/` | Fri 17:35 | 0.98015 (FULL OOF) | **0.838** -> France ~0.937, US+India ~0.976 | PROBE: v3 with all France rows emptied (measures France score) (1388739 S1 rows with matches) |
+| v4a | `submissions/v4a/` | Fri 18:49 | 0.98005 (FULL OOF) | _upload & fill in_ | stage 1 as deeper GPU XGBoost (depth 10, 1000 rounds) + v3 stage 2 (1634872 S1 rows with matches) |
+| v4 | `submissions/v4/` | Fri 19:56 | 0.97753 (test-like OOF, not comparable to FULL) | **0.961357** (-0.0086 vs v3: test-like data halved US candidate lists, 15.9 vs 31.3 on test) | trained on test-like conditions (US S1 at test density, look-alike records topped up) + sibling features, GPU XGBoost (1633498 S1 rows with matches) |
+| v6a | `submissions/v6a/` | Fri 20:46 | 0.97966 (test-like OOF, calibrated) | NOT UPLOADED (built on v4's test-like models) | v4 + consensus stage-2 features + calibrated per-country decision (held-out 0.97966 vs v4 0.97753, test-like validation) + France rows from French-cleaned rebuild (1637900 S1 rows with matches) |
+| v6 | `submissions/v6/` | Fri 21:32 | 0.98151 (FULL OOF, same validation as v3) | **0.967332** (-0.0027 vs v3; consensus and France cleaning not separable from this upload) | v3 base (full data) + consensus stage-2 features (held-out 0.98151 vs v3 0.98015) + France rows from French-cleaned rebuild; v3's decision rule, no calibration (1635015 S1 rows with matches) |
+| v7 | `submissions/v7/` | Fri 21:40 | 0.98151 (FULL OOF) | _upload & fill in_ | PROBE: v6 US/India (consensus features) + v3 France rows -> LB minus 0.9700 = consensus effect on US/India; v6 minus this = France cleaning effect (1634670 S1 rows with matches) |

@@ -92,11 +92,12 @@ def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
     tok = AutoTokenizer.from_pretrained(base)
     m = AutoModelForSequenceClassification.from_pretrained(base, num_labels=1).to(DEV)
     small = torch.cuda.get_device_properties(0).total_memory < 8e9
-    if small:
+    if small:      # 4 GB laptop GPU: freeze the word table (most of a multilingual model's weights), checkpoint
+        m.base_model.embeddings.word_embeddings.weight.requires_grad_(False)
         m.gradient_checkpointing_enable()
-        bs = min(bs, 16)
+        bs, lr = min(bs, 32), max(lr, 3e-5)
     bf16 = torch.cuda.is_bf16_supported()
-    opt = torch.optim.AdamW(m.parameters(), lr=lr, weight_decay=0.01)
+    opt = torch.optim.AdamW([p for p in m.parameters() if p.requires_grad], lr=lr, weight_decay=0.01)
     steps = max(1, r.height // bs)
     sch = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=steps, pct_start=0.06)
     scaler = torch.amp.GradScaler(enabled=not bf16)

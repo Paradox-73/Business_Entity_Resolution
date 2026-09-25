@@ -64,7 +64,7 @@ class Enc:
 
 
 def train(base="intfloat/multilingual-e5-base", max_pairs=2_000_000, bs=256, lr=3e-5):
-    max_pairs = LIMIT or max_pairs
+    max_pairs = LIMIT or int(os.environ.get("BER_EMB_PAIRS", max_pairs))
     tr = read_truth().filter(pl.col("s1_id").map_elements(lambda x: zlib.crc32(x.encode()) % 1000 >= 500,
                                                           return_dtype=pl.Boolean))
     q = pl.concat([load("train", k) for k in (2, 3)])
@@ -143,9 +143,10 @@ def search(k=20):
                 Qv = VQ[qi["i"].to_numpy()]
                 sid = si["q"].to_numpy()
                 qid = qi["q"].to_numpy()
-                for a in range(0, len(Qv), 2048):
-                    sc, ix = (torch.tensor(Qv[a:a + 2048], device=DEV) @ S.T).topk(k, dim=1)
-                    parts.append(pl.DataFrame({"q": np.repeat(qid[a:a + 2048], k), "s": sid[ix.cpu().numpy().ravel()],
+                qb = 2048 if torch.cuda.get_device_properties(0).total_memory > 8e9 else 256   # 4 GB laptop
+                for a in range(0, len(Qv), qb):
+                    sc, ix = (torch.tensor(Qv[a:a + qb], device=DEV) @ S.T).topk(k, dim=1)
+                    parts.append(pl.DataFrame({"q": np.repeat(qid[a:a + qb], k), "s": sid[ix.cpu().numpy().ravel()],
                                                "emb2_cos": sc.float().cpu().numpy().ravel()}))
                 log(f"{split} S{src} {c}: {len(Qv)} records searched")
         pl.concat(parts).write_parquet(os.path.join(OUT, f"{split}_topk.parquet"))

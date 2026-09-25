@@ -192,6 +192,13 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 - House-number change patterns are already learned: p2 matches the true rate per bucket (diff 1-2: p2 0.193 vs true 0.211; 3-5: 0.053 vs 0.050; >50: 0.564 vs 0.576). New number features would not add information.
 - France legal-form veto (audit, confirmed): France pairs with legal forms on both sides conflict in 3.6% of p2>=0.3 best candidates (US true pairs: 0.8%); 1,034 of 1,124 same-name same-number conflicts belong to S1 rows that already have a record with the matching form. v7 = v3 + this veto (17,934 pairs set to 0; France matched records 889,209 -> 883,826).
 
+### Shortcut checks (25 Sep 23:40-23:55) — all negative
+- ID numbers: |S1 id - record id| of true pairs has the same distribution as random pairs (share < 10M: 1.99% vs 1.99%; median 293M vs 293M). No ID leak.
+- File row order: Spearman(S1 row, record row) = -0.002 / -0.001; records of the same business are ~1.1M rows apart. No order leak.
+- Per-source coverage: 85% of matched S1 have records from both sources; the model already has same-source counts. Weak.
+- No-address records whose true S1 shares its core name with 2-60 S1 rows (random pick right 26.2%): closest ID 26.4%, most other records 23.1%, closest raw name (legal form, punctuation kept) 42.3%. Only the raw name carries signal, too weak to pay under F0.5.
+- No-address share: train US 3.6% / India 3.0%; test US 2.9% / India 2.4% / France 3.0%.
+
 ## Lessons (read before changing anything)
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.

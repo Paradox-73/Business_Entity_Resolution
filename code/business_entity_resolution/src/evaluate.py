@@ -19,7 +19,7 @@ from pipeline import (pairs_dir, train_meta, attach, topk, stage2_features, sibl
                       load_qattr, load_model, score, X, apply_decision, FEATURES, S2FEATS, SIBFEATS, CONSFEATS, N_FOLDS)
 
 
-def stage1_base(tag, d1, qmap):
+def stage1_base(tag, d1, qmap, cols1):
     cache = os.path.join(WORK, f"eval_{tag}_{os.path.basename(d1)}.parquet")
     smoke = os.environ.get("BER_EVAL_SMOKE")          # smoke test: first chunk only, nothing cached
     if os.path.exists(cache) and not smoke:
@@ -33,7 +33,7 @@ def stage1_base(tag, d1, qmap):
         for f in range(N_FOLDS):
             m = fold == f
             if m.any():
-                p1[m] = score(m1[f], X(p.filter(pl.Series(m)), FEATURES))
+                p1[m] = score(m1[f], X(p.filter(pl.Series(m)), cols1))
         base.append(topk(p.with_columns(p1=pl.Series(p1))))
         log(f"  stage 1 {os.path.basename(fpath)}")
     B = pl.concat(base)
@@ -52,7 +52,7 @@ def main(tag, dirs):
         md = os.path.join(WORK, "models", name)
         res = json.load(open(os.path.join(md, "result.json")))
         d1 = res.get("stage1_dir", md)
-        B = stage2_features(stage1_base(tag, d1, qmap), qinfo)
+        B = stage2_features(stage1_base(tag, d1, qmap, res.get("cols1", FEATURES)), qinfo)
         cols2 = res.get("cols2", FEATURES + S2FEATS)
         if any(c in cols2 for c in SIBFEATS):
             qattr = qattr if qattr is not None else load_qattr(tag)
@@ -75,7 +75,8 @@ def main(tag, dirs):
             out[c] = macro_f05_df(M, t.join(sc, on="s"), sc)
         log(f"{tag} | {name} (stage 1 {os.path.basename(d1)}, stage-2 models {ext}, rule {res['decision']}): "
             + ", ".join(f"{k} {v:.5f}" for k, v in out.items()))
-        json.dump(out, open(os.path.join(md, f"eval_{tag}.json"), "w"), indent=1)
+        if not os.environ.get("BER_EVAL_SMOKE"):
+            json.dump(out, open(os.path.join(md, f"eval_{tag}.json"), "w"), indent=1)
 
 
 if __name__ == "__main__":

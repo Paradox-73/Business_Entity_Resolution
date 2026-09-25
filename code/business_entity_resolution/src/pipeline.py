@@ -26,6 +26,15 @@ import polars as pl
 from common import WORK, OUT, log, read_truth, id_to_int, int_to_id, macro_f05_df
 from candidates import FEATURES, country_pairs
 
+# BER_S1_VARIANT selects the pair-feature set for stage 1 AND the pair part of stage 2 (models go to <dir>_<variant>).
+# "nomargin" (audit 25 Sep): drop every feature that describes a record's OTHER candidates (gaps to the next-best
+# candidate, ranks, candidate counts, chain count). They depend on S1 density and on how many look-alikes exist,
+# both of which differ between train and test; v4 showed the model is very sensitive to them.
+S1_VARIANT = os.environ.get("BER_S1_VARIANT", "")
+DROP1 = {"nomargin": [f for f in FEATURES if f.endswith("_margin") or f.endswith("_rank")]
+                     + ["n_cand", "n_name_hi", "n_addr_hi", "s_name_count"]}
+FEATURES1 = [f for f in FEATURES if f not in DROP1.get(S1_VARIANT, [])]
+
 N_FOLDS = 3
 PARAMS1 = dict(objective="binary", learning_rate=0.08, num_leaves=255, min_data_in_leaf=200,
                feature_fraction=0.8, bagging_fraction=0.7, bagging_freq=1, lambda_l2=1.0,
@@ -362,7 +371,7 @@ def train(tag, variant=""):
     te = t.join(s1e, on="s")
     log(f"train {tag}: {len(files)} chunk files, eval S1 {s1e.height}, eval true pairs {te.height}")
 
-    md = os.path.join(WORK, "models", tag + ("_xgb" if BACKEND == "xgb" else ""))
+    md = os.path.join(WORK, "models", tag + ("_xgb" if BACKEND == "xgb" else "") + (f"_{S1_VARIANT}" if S1_VARIANT else ""))
     os.makedirs(md, exist_ok=True)
     cache = os.path.join(md, "stage1_base.parquet")
     if os.path.exists(cache):
@@ -391,15 +400,15 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
     models1 = []
     for f in range(N_FOLDS):
         tr = S.filter(pl.col("fold") != f)
-        models1.append(fit(1, X(tr, FEATURES), tr["label"].to_numpy()))
+        models1.append(fit(1, X(tr, FEATURES1), tr["label"].to_numpy()))
         models1[-1].save_model(os.path.join(md, f"s1_f{f}" + EXT))   # save at once (crash safety)
         log(f"stage-1 fold {f} trained on {tr.height}")
-    imp = importance(models1, FEATURES)
+    imp = importance(models1, FEATURES1)
     log("stage-1 top features:", [(a, int(b)) for a, b in imp[:20]])
     del tr
     # one model on the whole sample, used for TEST (3x cheaper to apply than averaging fold models)
     if BACKEND != "xgb":   # GPU (4 GB) cannot hold the full 11.5M-row sample; XGBoost test uses the fold-model average
-        fit(1, X(S, FEATURES), S["label"].to_numpy()).save_model(os.path.join(md, "s1_full" + EXT))
+        fit(1, X(S, FEATURES1), S["label"].to_numpy()).save_model(os.path.join(md, "s1_full" + EXT))
     log("stage-1 full-sample model saved")
     del S
 
@@ -415,7 +424,7 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
         for f in range(N_FOLDS):
             m = fold == f
             if m.any():
-                p1[m] = score(models1[f], X(p.filter(pl.Series(m)), FEATURES))
+                p1[m] = score(models1[f], X(p.filter(pl.Series(m)), FEATURES1))
         p = p.with_columns(p1=pl.Series(p1))
         base.append(topk(p))
     B = pl.concat(base)
@@ -435,7 +444,7 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
 def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1, sc1, variant="", md1=None):
     # ---- stage 2
     B = stage2_features(B, qinfo)
-    cols2 = FEATURES + S2FEATS
+    cols2 = FEATURES1 + S2FEATS
     if variant in ("sib", "cons"):
         qattr = load_qattr("train")
         B = sibling_features(B, qattr)
@@ -473,7 +482,7 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
     res = {"tag": tag, "recall_ceiling": found / te.height, "pairs_per_q": npairs / nq,
            "stage1_global": [g1, gs1], "stage1_seg": sc1, "stage2_global": [g2, gs2], "stage2_seg": sc2,
            "thresholds": th2, "use_stage2": sc2 >= sc1, "decision": dec, "decision_score": sc_dec,
-           "cols2": cols2, "stage1_dir": md1 or md}
+           "cols2": cols2, "cols1": FEATURES1, "stage1_dir": md1 or md}
     json.dump(res, open(os.path.join(md, "result.json"), "w"), indent=1)
     B.select("q", "s", "p1", "p2", "label", "fold").write_parquet(os.path.join(md, "oof.parquet"))
     log("saved", md, res)
@@ -490,6 +499,7 @@ def predict(model_tag, test_tag):
             return [load_model(full)]
         return [load_model(os.path.join(d, f"s{stage}_f{i}")) for i in range(N_FOLDS)]
     m1, m2 = models(1), models(2)
+    cols1 = res.get("cols1", FEATURES)
     log(f"test models: stage 1 x{len(m1)}, stage 2 x{len(m2)}")
     d = pairs_dir(test_tag)
     s1 = pl.read_parquet(os.path.join(d, "s1.parquet"))
@@ -508,7 +518,7 @@ def predict(model_tag, test_tag):
             pairs = []
             for fpath in sorted(glob.glob(os.path.join(d, f"{c}_*.parquet"))):
                 p = pl.read_parquet(fpath)
-                p = p.with_columns(p1=pl.Series(np.mean([score(m, X(p, FEATURES)) for m in m1], axis=0), dtype=pl.Float32))
+                p = p.with_columns(p1=pl.Series(np.mean([score(m, X(p, cols1)) for m in m1], axis=0), dtype=pl.Float32))
                 base.append(topk(p))
                 pairs.append(p.select("s", "q"))
             P = pl.concat(pairs)

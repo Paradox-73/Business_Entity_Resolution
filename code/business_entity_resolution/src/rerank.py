@@ -271,19 +271,32 @@ def stage3():
     sides = [x for x in os.environ.get("BER_S3_SIDES", "a,b").split(",")
              if os.path.exists(os.path.join(OUT, f"train_ce{'' if x == 'a' else '_' + x}.parquet"))
              and os.path.exists(os.path.join(OUT, f"test_ce{'' if x == 'a' else '_' + x}.parquet"))]
-    tagx = "_" + "".join(sides)          # e.g. _a, _ab; never overwrites the files v7 was built from
+    # BER_S3_SEG=1: stage 3 also sees the record's segment (source file, no address, non-Latin name, India)
+    seg = os.environ.get("BER_S3_SEG") == "1"
+    feats = S3FEATS + (["src", "addr_missing", "name_nonlatin", "is_india"] if seg else [])
+    tagx = "_" + "".join(sides) + ("_seg" if seg else "")     # e.g. _a, _ab; never overwrites the files v7 was built from
+    tag = json.load(open(os.path.join(WORK, "models", md, "result.json")))["tag"]
+
+    def add_seg(df, split_tag):
+        if not seg:
+            return df
+        qi = pl.read_parquet(os.path.join(WORK, "pairs", split_tag, "q.parquet")).select(
+            "q", pl.col("src").cast(pl.Float32), pl.col("addr_missing").cast(pl.Float32),
+            pl.col("name_nonlatin").cast(pl.Float32), is_india=(pl.col("country") == "India").cast(pl.Float32))
+        return df.join(qi, on="q", how="left")
     log(f"stage 3 on sides {sides} (output suffix '{tagx}')")
     r = _s3_features(pl.concat([pl.read_parquet(os.path.join(OUT, f"train_ce{'' if x == 'a' else '_' + x}.parquet"))
                                 .with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64)) for x in sides]))
+    r = add_seg(r, tag)
     assert r.select(pl.struct("q", "s").is_duplicated().sum()).item() == 0
     s1 = pl.read_parquet(os.path.join(WORK, "train_s1.parquet"), columns=["entity_id"]).select(
         s=id_to_int("entity_id"), h=half("entity_id"))
     p3 = np.zeros(r.height, np.float32)
     for f in range(3):
         tr = r.filter(pl.col("fold") != f)
-        mdl = xgb.train(params, xgb.DMatrix(tr.select(S3FEATS).to_numpy(), tr["label"].to_numpy()), 300)
+        mdl = xgb.train(params, xgb.DMatrix(tr.select(feats).to_numpy(), tr["label"].to_numpy()), 300)
         msk = (r["fold"] == f).to_numpy()
-        p3[msk] = mdl.predict(xgb.DMatrix(r.filter(pl.Series(msk)).select(S3FEATS).to_numpy()))
+        p3[msk] = mdl.predict(xgb.DMatrix(r.filter(pl.Series(msk)).select(feats).to_numpy()))
     r = r.with_columns(p3=pl.Series(p3))
     r.select("q", "s", "p3", "label", "fold").write_parquet(os.path.join(OUT, f"oof_s3{tagx}.parquet"))  # for blending
     # held-out: p2 replaced by p3 on the close-call rows that have an out-of-sample transformer score
@@ -293,7 +306,6 @@ def stage3():
     new = (oof.join(r.select("q", "s", "p3"), on=["q", "s"], how="left").join(touched, on="q", how="left")
               .with_columns(p2n=pl.when(pl.col("t").is_null()).then(pl.col("p2")).otherwise(pl.col("p3").fill_null(0.0))))
     # S1 rows that exist in this model's training setup; eval half = crc32 half < 500
-    tag = json.load(open(os.path.join(WORK, "models", md, "result.json")))["tag"]
     allS = s1.join(pl.read_parquet(os.path.join(WORK, "pairs", tag, "s1.parquet"), columns=["s"]).with_columns(
         pl.col("s").cast(pl.Int64)), on="s")
     truth_all = read_truth().select(s=id_to_int("s1_id"), q=id_to_int("q_id"))
@@ -312,16 +324,17 @@ def stage3():
                "x": [], "y": [], "decision": {"default": json.loads(kn)}, "base": g[kg], "best": n_[kn],
                "all_S1": {"base": max(res["all"][0].values()), "best_rule_score": res["all"][1][kn]}},
               open(os.path.join(OUT, f"rule{tagx}.json"), "w"), indent=1)
-    mdl = xgb.train(params, xgb.DMatrix(r.select(S3FEATS).to_numpy(), r["label"].to_numpy()), 300)
+    mdl = xgb.train(params, xgb.DMatrix(r.select(feats).to_numpy(), r["label"].to_numpy()), 300)
     mdl.save_model(os.path.join(OUT, f"stage3{tagx}.json"))
     imp = mdl.get_score(importance_type="total_gain")
-    log("stage-3 importance:", {S3FEATS[int(k[1:])]: round(v) for k, v in imp.items()})
+    log("stage-3 importance:", {feats[int(k[1:])]: round(v) for k, v in imp.items()})
     # test: p2 replaced by the mean stage-3 probability over sides for close-call rows, other rows unchanged
     t = None
     for x in sides:
         tx = _s3_features(pl.read_parquet(os.path.join(OUT, f"test_ce{'' if x == 'a' else '_' + x}.parquet")).with_columns(
             pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64)))
-        tx = tx.select("q", "s", **{f"p3_{x}": pl.Series(mdl.predict(xgb.DMatrix(tx.select(S3FEATS).to_numpy())), dtype=pl.Float32)})
+        tx = add_seg(tx, "test")
+        tx = tx.select("q", "s", **{f"p3_{x}": pl.Series(mdl.predict(xgb.DMatrix(tx.select(feats).to_numpy())), dtype=pl.Float32)})
         t = tx if t is None else t.join(tx, on=["q", "s"], how="full", coalesce=True)
     t = t.with_columns(p3=pl.mean_horizontal([f"p3_{x}" for x in sides]))
     if len(sides) > 1:

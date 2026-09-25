@@ -163,7 +163,17 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 Smoke tests for AWS (laptop GPU, tiny subsets): `embed_all.py` train/encode/search/eval and `rerank.py` select/train/score/stage3 run end to end.
 Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (3.43M pairs).
 
+### v4 LB 0.961357 (25 Sep 20:50) — test-like training HURT (-0.0086 vs v3)
+- Cause (checked on data): `testlike.py` removed S1 rows by deleting their candidate pairs, so records kept only the
+  remaining candidates. Candidates per US record: full train 31.4, **test-like 15.9**, test 31.3; candidates with name
+  token-set >= 90: full 3.4, test-like 1.87, test 3.84 (India 30.1 / 27.5 / 30.1). The real search at lower density
+  refills each record's top-k with other S1 rows, so test looks like FULL train on these features, not like test-like.
+- The test-like held-out score (0.9775) could not see this: its validation rows have the same distortion.
+- Decision: drop test-like training. v6a (built on it) not uploaded. v6 rebuilt on FULL data (v3 base) + consensus
+  features + calibration + France cleaning.
+
 ## Lessons (read before changing anything)
+- **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
 - A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.
 - A relative `max_df` makes search cost grow with S1 size; use an absolute document-frequency cap for **search**, but compute similarity **features** with the full vocabulary.

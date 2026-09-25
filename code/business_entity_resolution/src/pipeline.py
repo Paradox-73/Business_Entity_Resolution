@@ -86,7 +86,8 @@ def build(split, tag, frac=None):
                   .select(["q", "s"] + [pl.col(f).cast(pl.Float32) for f in FEATURES]))
             p.write_parquet(os.path.join(out, f"{c}_{i:03d}.parquet"))
 
-        country_pairs(s1.filter(pl.col("country") == c), q.filter(pl.col("country") == c), split, on_chunk)
+        country_pairs(s1.filter(pl.col("country") == c), q.filter(pl.col("country") == c), split, on_chunk,
+                      skip=lambda i: os.path.exists(os.path.join(out, f"{c}_{i:03d}.parquet")))
         open(done, "w").close()
 
 

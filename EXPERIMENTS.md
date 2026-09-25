@@ -91,9 +91,17 @@ Build 145 min (42 chunks, ~31 candidates per S2/S3 row, 319M pairs). Stage-1 sam
 
 Note: S10 scores (0.9877) were optimistic; FULL (0.9790) is the honest estimate for test density.
 
+Error analysis of run 9 (`work/full_errors.log`), points lost: wrong_s1 0.0092 (65% no address), under_thresh 0.0077 (22% no address; noisy house numbers "11" vs "127 Lindsey Avenue"), blocking_miss 0.0051 (**51% no address**; name-only search at full density misses chains), decoy_merge 0.0049.
+
+Next ideas, ranked by expected gain / cost:
+1. Sibling-agreement stage-2 features (`train full sib`, reuses cached stage 1; ~20 min) — targets decoys + noisy house numbers.
+2. Rows without address: name word search with k=100 (needs rebuild, ~5 h) — targets half of blocking misses; many are ambiguous chains, so realistic gain maybe +0.0005–0.001.
+3. Stage-2 LightGBM tuning (more rounds, lower learning rate) on the cached base.
+
 **Decision (exp 8):** replace address char-3-gram search with word 1-2-gram search; add name+address word search (top 20); keep name char3 (top 10, top 30 without address) and the embedding search. New features: `cos_addr_w`, `cos_comb_w` (+ margin, rank), `from_comb`. One US chunk at full density: search 77 s + features 104 s, ~31 candidates per row. Rebuilding FULL train and test with it (~6.5 h chain, `work/run_all.sh`).
 
 ## Lessons (read before changing anything)
+- A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.
 - A relative `max_df` makes search cost grow with S1 size; use an absolute document-frequency cap for **search**, but compute similarity **features** with the full vocabulary.
 - Always time one chunk at test scale (US test S1 = 663k rows) before launching a full run.
 - Prediction share per country on test (v1): India 12.8% empty vs 5.6% singletons in train, so India is under-matched.

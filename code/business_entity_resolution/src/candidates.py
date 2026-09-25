@@ -242,9 +242,13 @@ FEATURES = ["cos_name", "cos_addr", "cos_addr_w", "cos_comb_w", "from_name", "fr
             "n_cand", "n_name_hi", "n_addr_hi"]
 
 
-def country_pairs(s1, q, split, on_chunk):
-    """Build the index for one country and call on_chunk(pairs_df, chunk_no) for every chunk of S2/S3 rows."""
+def country_pairs(s1, q, split, on_chunk, skip=None):
+    """Build the index for one country and call on_chunk(pairs_df, chunk_no) for every chunk of S2/S3 rows.
+    skip(i) -> True skips chunks already on disk (resume after an interruption)."""
     idx = CountryIndex(s1, split)
     for i, a in enumerate(range(0, q.height, CHUNK)):
+        if skip is not None and skip(i):
+            log(f"  chunk {i}: already on disk, skipped")
+            continue
         on_chunk(idx.chunk_pairs(q.slice(a, CHUNK)), i)
         log(f"  chunk {i}: {min(a + CHUNK, q.height)}/{q.height} rows")

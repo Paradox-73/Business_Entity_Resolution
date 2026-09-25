@@ -180,6 +180,18 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 | + calibration, per-country rule | 0.98173 (+0.0002 more) | left out: on test it adds ~56k borderline matches (p2 0.4-0.5), the band where test has 2x train's look-alike share |
 | v6 = consensus + v3's rule (expected-F0.5, floor 0.3, raw p2) + France from the cleaned rebuild | - | 1,635,015 S1 rows with matches; matched records vs v3: US 2.261M (+20k), India 2.746M (+39k), France 0.908M (+19k) |
 
+### Held-out loss breakdown of the best model (full_cons, 0.98151; `error2.py`, log work/errors_full_cons.log, 25 Sep 23:30)
+| Mistake | Points | Where |
+|---|---|---|
+| true record never reaches stage 2 | 0.00694 | no-address 0.00422; chain names (6+ identical S1 names) 0.00404; shortlist recall 98.51%, stage-2 input 97.86% (0.65% cut by top-2) |
+| best candidate right, rejected by the rule | 0.00692 | changed house number 0.00290; no house number 0.00196 |
+| look-alike merged | 0.00262 | same house number, changed name 0.00125 |
+| wrong S1 chosen | 0.00128 | no-address 0.00104 |
+| record of another S1 merged | 0.00073 | |
+- No-address records cost ~0.0073 of 0.0185; most are chain names with no way to pick among identical S1 rows (a floor for everyone).
+- House-number change patterns are already learned: p2 matches the true rate per bucket (diff 1-2: p2 0.193 vs true 0.211; 3-5: 0.053 vs 0.050; >50: 0.564 vs 0.576). New number features would not add information.
+- France legal-form veto (audit, confirmed): France pairs with legal forms on both sides conflict in 3.6% of p2>=0.3 best candidates (US true pairs: 0.8%); 1,034 of 1,124 same-name same-number conflicts belong to S1 rows that already have a record with the matching form. v7 = v3 + this veto (17,934 pairs set to 0; France matched records 889,209 -> 883,826).
+
 ## Lessons (read before changing anything)
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.

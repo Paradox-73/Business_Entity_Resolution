@@ -29,8 +29,8 @@ OUT = os.environ.get("BER_CE_DIR", os.path.join(WORK, "ce"))          # rows/sco
 # side "b" trains on group "eval" and scores group "train". Stage 3 then learns from both groups, and test
 # uses the average of both sides' stage-3 probabilities.
 SIDE = os.environ.get("BER_CE_SIDE", "a")
-SFX = "" if SIDE == "a" else "_b"
-TRAIN_GRP, SCORE_GRP = ("train", "eval") if SIDE == "a" else ("eval", "train")
+SFX = "" if SIDE == "a" else "_" + SIDE          # more models per half: side "a2" = another transformer on group "train"
+TRAIN_GRP, SCORE_GRP = ("train", "eval") if SIDE.startswith("a") else ("eval", "train")
 FT = os.environ.get("BER_CE_MODEL", os.path.join(WORK, "ce", "model" + SFX))  # the trained transformer (shared)
 # BER_CE_REUSE=<another BER_CE_DIR>: reuse that folder's scores of the same transformer for pairs already scored
 REUSE = os.environ.get("BER_CE_REUSE", "")

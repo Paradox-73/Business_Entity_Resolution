@@ -7,4 +7,4 @@
 | v3 | `submissions/v3/` | Fri 17:15 | 0.98015 (FULL OOF) | **0.9700** | v2 + sibling-agreement features in stage 2 (GPU XGBoost stage 2) (1634819 S1 rows with matches) |
 | v5 | `submissions/v5/` | Fri 17:35 | 0.98015 (FULL OOF) | **0.838** -> France ~0.937, US+India ~0.976 | PROBE: v3 with all France rows emptied (measures France score) (1388739 S1 rows with matches) |
 | v4a | `submissions/v4a/` | Fri 18:49 | 0.98005 (FULL OOF) | _upload & fill in_ | stage 1 as deeper GPU XGBoost (depth 10, 1000 rounds) + v3 stage 2 (1634872 S1 rows with matches) |
-| v4 | `submissions/v4/` | Fri 19:56 | 0.97753 (FULL OOF) | _upload & fill in_ | trained on test-like conditions (US S1 at test density, look-alike records topped up) + sibling features, GPU XGBoost (1633498 S1 rows with matches) |
+| v4 | `submissions/v4/` | Fri 19:56 | 0.97753 (test-like OOF, not comparable to FULL) | _upload & fill in_ | trained on test-like conditions (US S1 at test density, look-alike records topped up) + sibling features, GPU XGBoost (1633498 S1 rows with matches) |

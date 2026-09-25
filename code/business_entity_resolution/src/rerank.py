@@ -183,7 +183,10 @@ def stage3():
     oof = pl.read_parquet(os.path.join(WORK, "models", md, "oof.parquet"))
     new = oof.join(r.select("q", "s", "p3"), on=["q", "s"], how="left").with_columns(
         p2n=pl.coalesce("p3", "p2"))
-    ev = s1.filter(pl.col("h") < 500).select("s")
+    # eval S1 = eval half of the S1 rows that exist in this model's training setup (e.g. test-like keeps 50% of US)
+    tag = json.load(open(os.path.join(WORK, "models", md, "result.json")))["tag"]
+    ev = (s1.filter(pl.col("h") < 500).select("s")
+            .join(pl.read_parquet(os.path.join(WORK, "pairs", tag, "s1.parquet"), columns=["s"]), on="s"))
     truth = read_truth().select(s=id_to_int("s1_id"), q=id_to_int("q_id")).join(ev, on="s")
     touched = r.select("q").unique()
     new = new.join(touched.with_columns(t=pl.lit(True)), on="q", how="left").with_columns(

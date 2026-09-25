@@ -87,7 +87,7 @@ TOPK2 = 2
 # every matching pair + a share of "hard" non-matches (top-2 by name or address, or look-alike names)
 # + a share of the rest. Keeps ~8M rows for 16 GB RAM. (exp 6: record-level 6% sampling kept only 182k positives)
 NEG_RATE = {"full": (0.15, 0.015), "s10": (1.0, 0.10)}
-STAGE2_RATE = {"full": 0.5, "s10": 1.0, "tlike": 0.5}
+STAGE2_RATE = {"full": 0.5, "s10": 1.0, "tlike": 0.5, "tl2": 0.5}
 SEG_COLS = ["addr_missing", "name_nonlatin", "src"]
 SEG_PASSES = 0   # per-segment threshold search: 0 = off (gave +0.0000 on s10, exp 5) and is slow at full scale
 S2FEATS = ["p1", "p1_rank", "p1_margin", "s_in_cnt", "s_in_sum", "s_in_max_other", "s_in_same_src",

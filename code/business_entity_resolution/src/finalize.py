@@ -36,6 +36,29 @@ nf = B.select(pl.struct("q", "s").is_duplicated().sum()).item()
 assert nf == 0, f"{nf} duplicated (q, s) rows: a country appears in two score files"
 if cal.get("x"):
     B = B.with_columns(pc=pl.Series(np.interp(B["p2"].to_numpy(), cal["x"], cal["y"]).astype(np.float32)))
+# France legal-form veto (audit 25 Sep, confirmed on data): France look-alikes keep the name and change the legal
+# form, while true France records keep it. The cleaning strips legal forms from name_core, so the model cannot see
+# the conflict. BER_FR_LEGAL_VETO=1: a France pair whose two raw names both carry a legal form, with none in common,
+# gets p2 = 0 before the decision.
+FR_FORMS = ["sarl", "sas", "sasu", "sa", "eurl", "sci", "snc", "ei", "eirl", "selarl", "scp", "gie", "earl"]
+if os.environ.get("BER_FR_LEGAL_VETO") == "1":
+    def forms(split_files):
+        d = pl.concat([pl.read_parquet(f, columns=["entity_id", "business_name", "country"]) for f in split_files])
+        d = d.filter(pl.col("country") == "France")
+        t = (d["business_name"].fill_null("").str.normalize("NFKD").str.replace_all(r"\p{M}", "").str.to_lowercase()
+               .str.replace_all(r"\b([a-z])\.", "$1").str.replace_all(r"[^a-z0-9]+", " ").str.strip_chars())
+        return d.select(id=id_to_int("entity_id"), f=t.str.split(" ").list.eval(
+            pl.element().replace({"5arl": "sarl", "5as": "sas"})).list.eval(
+            pl.element().filter(pl.element().is_in(FR_FORMS))).list.unique())
+    fs = forms([os.path.join(WORK, "test_s1.parquet")]).rename({"id": "s", "f": "fs"})
+    fq = forms([os.path.join(WORK, f"test_s{k}.parquet") for k in (2, 3)]).rename({"id": "q", "f": "fq"})
+    B = B.join(fs, on="s", how="left").join(fq, on="q", how="left")
+    veto = ((pl.col("country") == "France") & (pl.col("fs").list.len() > 0) & (pl.col("fq").list.len() > 0)
+            & (pl.col("fs").list.set_intersection("fq").list.len() == 0)).fill_null(False)
+    log(f"France legal-form veto: {B.filter(veto).height} pairs set to p2=0 "
+        f"({B.filter(veto & (pl.col('p2') >= 0.3)).height} with p2 >= 0.3)")
+    B = B.with_columns(p2=pl.when(veto).then(0.0).otherwise(pl.col("p2")).cast(pl.Float32)).drop("fs", "fq")
+
 parts = []
 for c in s1["country"].unique().sort().to_list():
     rule = cal["decision"].get(c, cal["decision"]["default"])

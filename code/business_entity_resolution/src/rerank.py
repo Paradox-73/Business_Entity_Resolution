@@ -102,8 +102,16 @@ def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
     sch = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=steps, pct_start=0.06)
     scaler = torch.amp.GradScaler(enabled=not bf16)
     tq, ts, y = r["tq"].to_list(), r["ts"].to_list(), r["label"].cast(pl.Float32).to_numpy()
+    ck = os.path.join(OUT, "ckpt.pt")                 # resume after a crash (the 4 GB GPU is shared)
+    start = 0
+    if os.path.exists(ck):
+        st = torch.load(ck, map_location="cpu", weights_only=False)   # CPU first: loading onto the GPU doubles memory
+        m.load_state_dict(st["model"]); opt.load_state_dict(st["opt"]); sch.load_state_dict(st["sch"])
+        scaler.load_state_dict(st["scaler"]); start = st["step"] + 1
+        log(f"resumed from step {st['step']}")
+        del st
     m.train()
-    for i in range(steps):
+    for i in range(start, steps):
         a, b = i * bs, (i + 1) * bs
         enc = tok(tq[a:b], ts[a:b], padding=True, truncation=True, max_length=MAXLEN, return_tensors="pt").to(DEV)
         with torch.autocast("cuda", dtype=torch.bfloat16 if bf16 else torch.float16):
@@ -118,6 +126,10 @@ def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
         sch.step()
         if i % 500 == 0:
             log(f"step {i}/{steps} loss {loss.item():.4f}")
+        if i % 1000 == 999:
+            torch.save({"model": m.state_dict(), "opt": opt.state_dict(), "sch": sch.state_dict(),
+                        "scaler": scaler.state_dict(), "step": i}, ck + ".tmp")
+            os.replace(ck + ".tmp", ck)
     os.makedirs(FT, exist_ok=True)
     m.save_pretrained(FT)
     tok.save_pretrained(FT)

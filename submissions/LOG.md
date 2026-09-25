@@ -4,3 +4,4 @@
 |---|---|---|---|---|---|
 | v1 | `v1_matching_results.tsv` | 25 Sep 03:02 | 0.9753 (10% train slice, 3-fold) | not submitted (team decision: broken full-density shortlist) | TF-IDF name+address shortlist (top 10 each, same country), 40 features, LightGBM, each S2/S3 row to its best S1 if prob >= 0.75 |
 | v2 | `submissions/v2/` | Fri 17:00 | 0.97904 (FULL OOF) | _upload & fill in_ | two-stage LightGBM, word-level shortlist, expected-F0.5 decision (1633975 S1 rows with matches) |
+| v3 | `submissions/v3/` | Fri 17:15 | 0.98015 (FULL OOF) | _upload & fill in_ | v2 + sibling-agreement features in stage 2 (GPU XGBoost stage 2) (1634819 S1 rows with matches) |

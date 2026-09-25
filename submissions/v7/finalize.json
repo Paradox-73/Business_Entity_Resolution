@@ -1,16 +1,15 @@
 {
- "model": "full_sib",
+ "model": "full_cons",
  "scores": [
-  "E:\\Projects\\Amazon ML Challenge\\work\\test_scores_full_sib.parquet"
+  "E:\\Projects\\Amazon ML Challenge\\work\\ce\\test_scores_ce.parquet"
  ],
  "calib": {
   "default": {
-   "type": "expf",
-   "floor": 0.3,
-   "alpha": 1.0,
+   "type": "thr",
+   "t": 0.65,
    "prob": "p2"
   }
  },
- "oof_base": 0.98151,
- "oof_best": 0.98151
+ "oof_base": 0.98094,
+ "oof_best": 0.98794
 }

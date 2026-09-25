@@ -1,0 +1,7 @@
+[   27.4s] thr 0.45: eval S1 macro F0.5 GBDT 0.98068 -> with transformer 0.98691
+[   34.6s] thr 0.5: eval S1 macro F0.5 GBDT 0.98097 -> with transformer 0.98737
+[   41.8s] thr 0.55: eval S1 macro F0.5 GBDT 0.98114 -> with transformer 0.98768
+[   48.9s] thr 0.6: eval S1 macro F0.5 GBDT 0.98114 -> with transformer 0.98785
+[   56.0s] thr 0.65: eval S1 macro F0.5 GBDT 0.98094 -> with transformer 0.98794
+[   62.8s] stage-3 importance: {'p1': 46776, 'p2': 1227182, 'ce': 6049184, 'ce_margin': 148827, 'ce_rank': 197, 'p2_margin': 548056}
+[   70.6s] wrote E:\Projects\Amazon ML Challenge\work\ce/test_scores_ce.parquet (10713750 rows; 2258991 S2/S3 rows re-scored)

@@ -150,6 +150,17 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 - Held-out on the test-like setup: stage 1 0.9719, stage 2 0.9775, recall ceiling 0.9844; best rule plain threshold 0.55 (expected-F0.5 rule 0.9759 there). Not comparable with v3's 0.9802 (different validation data).
 - France cleaning rules written (`normalize.py` french=True, `prep.py france` -> split `testfr`), not yet used.
 
+### v6 ingredients (25 Sep 20:00-20:25), all on the test-like validation (v4 base 0.97753)
+| Change | Held-out macro F0.5 | Decision |
+|---|---|---|
+| Calibration: isotonic map of p2 (cross-fitted by fold), then expected-F0.5 rule per country | 0.97757 -> 0.97811 (+0.0005); US 0.9793 -> 0.9797, India 0.9762 -> 0.9768 | keep (floor 0.4-0.5, alpha 1.0; France uses the pooled rule) |
+| p2 calibration check | p2 0.3-0.4 true 47.8%, 0.4-0.5 57.9%, 0.5-0.6 68.2%, 0.6-0.7 77.3%, 0.8-0.9 92.2% | p2 is under-confident, as in v3 |
+| Consensus stage-2 features (agreement with ALL rows pointing at the same S1 with p1 >= 0.5: mean/min name and address token-set, share/count with the same house number) | stage 2 at t=0.55: 0.9775 -> 0.9791; with expected-F0.5 rule 0.97926 (+0.0017) | keep |
+| France cleaning (French rules, testfr rebuild), v4 model | no labels; 3.1% of France matched pairs change (18,050 records lose a match, 27,283 gain one, 816 move); best p2 > 0.9: 59.0% -> 60.1% | LB only |
+
+Smoke tests for AWS (laptop GPU, tiny subsets): `embed_all.py` train/encode/search/eval and `rerank.py` select/train/score/stage3 run end to end.
+Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (3.43M pairs).
+
 ## Lessons (read before changing anything)
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
 - A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.

@@ -1,6 +1,7 @@
 """Write matching_results.tsv from saved test scores with the calibrated per-country decision (calib.py).
 
-  python finalize.py <model_dir_name> <out_dir> <scores.parquet> [<scores.parquet> ...]
+  python finalize.py <model_dir_name> <out_dir> <scores.parquet>[:<countries>] [...]
+  e.g. finalize.py tlike_xgb_cons out_v6 E:/.../test_scores_tlike_xgb_cons.parquet:US,India E:/.../test_scores_tlike_xgb_cons_testfr.parquet:France
 
 Each scores file has q, s, p1, p2 (pipeline.predict writes WORK/test_scores_<model>[_<test_tag>].parquet).
 Several files are concatenated (e.g. US/India from the full test build + France from the 'testfr' rebuild);
@@ -18,7 +19,16 @@ md, out_dir, files = os.path.join(WORK, "models", sys.argv[1]), sys.argv[2], sys
 cal = json.load(open(os.path.join(md, "calib.json")))
 s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
     s=id_to_int("entity_id"), s1_id="entity_id", country="country")
-B = pl.concat([pl.read_parquet(f, columns=["q", "s", "p2"]) for f in files]).join(s1.select("s", "country"), on="s")
+def load_scores(spec):
+    """'path' (all countries) or 'path:US,India' (only these countries' rows)."""
+    path, sep, cs = spec.rpartition(":")
+    if not sep or cs.endswith(".parquet") or "/" in cs or "\\" in cs:     # no country list (colon of "E:/...")
+        path, cs = spec, ""
+    b = pl.read_parquet(path, columns=["q", "s", "p2"]).join(s1.select("s", "country"), on="s")
+    return b.filter(pl.col("country").is_in(cs.split(","))) if cs else b
+
+
+B = pl.concat([load_scores(f) for f in files])
 dup = B.group_by("q").agg(pl.col("country").n_unique().alias("k")).filter(pl.col("k") > 1).height
 assert dup == 0, f"{dup} records have candidates in two countries"
 nf = B.select(pl.struct("q", "s").is_duplicated().sum()).item()

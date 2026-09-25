@@ -27,7 +27,7 @@ def main(tag, n_ex=10):
     qinfo = pl.read_parquet(os.path.join(pairs_dir(tag), "q.parquet"))
     s1e = s1.filter("is_eval").select("s")
     te = t.join(s1e, on="s")
-    found = pl.concat([attach(pl.read_parquet(f), qmap).filter("label").select("q", "s") for f in chunk_files(tag)])
+    found = pl.concat([attach(pl.read_parquet(f, columns=["q", "s"]), qmap).filter("label").select("q", "s") for f in chunk_files(tag)])
     pred = decide(B, prob, thr, qinfo.drop("country"))
     base = macro_f05_df(pred, te, s1e)
     log(f"{tag}: {prob}, macro F0.5 on eval S1 = {base:.4f}")

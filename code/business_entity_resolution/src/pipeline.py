@@ -160,6 +160,45 @@ def stage2_features(b, qinfo):
     return b
 
 
+SIBFEATS = ["sib_p1", "sib_name_tset", "sib_addr_tset", "sib_num_eq", "sib_same_src", "sib_missing"]
+
+
+def load_qattr(split):
+    """q (int) -> name_core, addr, first house number, for S2+S3 rows (sibling features)."""
+    return pl.concat([pl.read_parquet(os.path.join(WORK, f"{split}_s{k}.parquet"),
+                                      columns=["entity_id", "name_core", "addr", "addr_nums"]) for k in (2, 3)]).select(
+        q=id_to_int("entity_id"), nm="name_core", ad="addr", n1=pl.col("addr_nums").list.first())
+
+
+def sibling_features(b, qattr):
+    """Compare each row q with its 'sibling': the best OTHER S2/S3 row whose top candidate is the same S1.
+    A true match usually agrees with its siblings (they describe the same business); a decoy does not."""
+    from rapidfuzz import fuzz
+    from rapidfuzz.process import cpdist
+    top = b.filter(pl.col("p1_rank") == 1).select("s", "q", "p1")
+    t2 = (top.sort("p1", descending=True).group_by("s", maintain_order=True).head(2)
+             .with_columns(r=pl.int_range(pl.len()).over("s")))
+    first = t2.filter(pl.col("r") == 0).select("s", qa="q", pa="p1")
+    second = t2.filter(pl.col("r") == 1).select("s", qb="q", pb="p1")
+    b = b.join(first, on="s", how="left").join(second, on="s", how="left").with_columns(
+        sib_q=pl.when(pl.col("qa") == pl.col("q")).then(pl.col("qb")).otherwise(pl.col("qa")),
+        sib_p1=pl.when(pl.col("qa") == pl.col("q")).then(pl.col("pb")).otherwise(pl.col("pa"))).drop("qa", "qb", "pa", "pb")
+    b = (b.join(qattr, on="q", how="left")
+          .join(qattr.rename({"q": "sib_q", "nm": "nm_s", "ad": "ad_s", "n1": "n1_s"}), on="sib_q", how="left"))
+    fill = lambda c: b[c].fill_null("").to_list()
+    ns = cpdist(fill("nm"), fill("nm_s"), scorer=fuzz.token_set_ratio, workers=-1, dtype=np.float32)
+    ad = cpdist(fill("ad"), fill("ad_s"), scorer=fuzz.token_set_ratio, workers=-1, dtype=np.float32)
+    miss = b["sib_q"].is_null()
+    b = b.with_columns(
+        sib_name_tset=pl.when(miss).then(None).otherwise(pl.Series(ns)),
+        sib_addr_tset=pl.when(miss).then(None).otherwise(pl.Series(ad)),
+        sib_num_eq=(pl.col("n1") == pl.col("n1_s")).cast(pl.Float32),
+        sib_same_src=((pl.col("q") // 10_000_000_000) == (pl.col("sib_q") // 10_000_000_000)).cast(pl.Float32),
+        sib_missing=miss.cast(pl.Float32),
+    ).drop("nm", "ad", "n1", "nm_s", "ad_s", "n1_s", "sib_q")
+    return b
+
+
 # ---------------------------------------------------------------- decision
 def decide(b, prob, thr, qinfo):
     """Top-1 S1 per q by `prob`, kept if prob >= its segment threshold. Returns DataFrame s, q."""
@@ -230,7 +269,9 @@ def tune(b, prob, truth, s1e, qinfo):
 
 
 # ---------------------------------------------------------------- train
-def train(tag):
+def train(tag, variant=""):
+    """variant: '' = base stage 2; 'sib' = stage 2 with sibling features. Stage 1 is shared (cached per tag);
+    stage-2 outputs of a variant go to models/<tag>_<variant>/ so the base model stays untouched."""
     s1, t, qmap = train_meta(tag)
     qinfo = pl.read_parquet(os.path.join(pairs_dir(tag), "q.parquet")).drop("country")
     files = chunk_files(tag)
@@ -254,7 +295,9 @@ def train(tag):
     else:
         B, models1, found, npairs, g1, gs1, sc1 = stage1(files, qmap, rate, s1e, te, qinfo, md)
         nq = qinfo.height
-    return train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1, sc1)
+    md2 = os.path.join(WORK, "models", f"{tag}_{variant}" if variant else tag)
+    os.makedirs(md2, exist_ok=True)
+    return train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md2, g1, gs1, sc1, variant, md)
 
 
 def stage1(files, qmap, rate, s1e, te, qinfo, md):
@@ -306,10 +349,14 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
     return B, models1, found, npairs, g1, gs1, sc1
 
 
-def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1, sc1):
+def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1, sc1, variant="", md1=None):
     # ---- stage 2
     B = stage2_features(B, qinfo)
     cols2 = FEATURES + S2FEATS
+    if variant == "sib":
+        B = sibling_features(B, load_qattr("train"))
+        cols2 = cols2 + SIBFEATS
+        log("sibling features added")
     p2 = np.zeros(B.height, np.float32)
     models2 = []
     for f in range(N_FOLDS):
@@ -336,7 +383,8 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
     del tr
     res = {"tag": tag, "recall_ceiling": found / te.height, "pairs_per_q": npairs / nq,
            "stage1_global": [g1, gs1], "stage1_seg": sc1, "stage2_global": [g2, gs2], "stage2_seg": sc2,
-           "thresholds": th2, "use_stage2": sc2 >= sc1, "decision": dec, "decision_score": sc_dec}
+           "thresholds": th2, "use_stage2": sc2 >= sc1, "decision": dec, "decision_score": sc_dec,
+           "cols2": cols2, "stage1_dir": md1 or md}
     json.dump(res, open(os.path.join(md, "result.json"), "w"), indent=1)
     B.select("q", "s", "p1", "p2", "label", "fold").write_parquet(os.path.join(md, "oof.parquet"))
     log("saved", md, res)
@@ -347,30 +395,46 @@ def predict(model_tag, test_tag):
     md = os.path.join(WORK, "models", model_tag)
     res = json.load(open(os.path.join(md, "result.json")))
     def models(stage):
-        full = os.path.join(md, f"s{stage}_full.txt")
+        d = res.get("stage1_dir", md) if stage == 1 else md
+        full = os.path.join(d, f"s{stage}_full.txt")
         if os.path.exists(full):
             return [lgb.Booster(model_file=full)]
-        return [lgb.Booster(model_file=os.path.join(md, f"s{stage}_f{i}.txt")) for i in range(N_FOLDS)]
+        return [lgb.Booster(model_file=os.path.join(d, f"s{stage}_f{i}.txt")) for i in range(N_FOLDS)]
     m1, m2 = models(1), models(2)
     log(f"test models: stage 1 x{len(m1)}, stage 2 x{len(m2)}")
     d = pairs_dir(test_tag)
     s1 = pl.read_parquet(os.path.join(d, "s1.parquet"))
     qinfo = pl.read_parquet(os.path.join(d, "q.parquet")).drop("country")
     os.makedirs(OUT, exist_ok=True)
-    base, cands = [], []
-    for c in s1["country"].unique().sort().to_list():
-        pairs = []
-        for fpath in sorted(glob.glob(os.path.join(d, f"{c}_*.parquet"))):
-            p = pl.read_parquet(fpath)
-            p = p.with_columns(p1=pl.Series(np.mean([m.predict(X(p, FEATURES)) for m in m1], axis=0), dtype=pl.Float32))
-            base.append(topk(p))
-            pairs.append(p.select("s", "q"))
-        P = pl.concat(pairs)
-        cands.append(P.group_by("s").agg(pl.col("q").unique().sort()))
-        log(f"{c}: {P.height} candidate pairs")
-        del P, pairs
-    B = stage2_features(pl.concat(base), qinfo)
-    cols2 = FEATURES + S2FEATS
+    # stage-1 test scores depend only on the stage-1 model: cache them so a new stage 2 re-predicts in minutes
+    s1tag = os.path.basename(res.get("stage1_dir", md))
+    base_cache = os.path.join(WORK, f"test_base_{test_tag}_{s1tag}.parquet")
+    cand_cache = os.path.join(WORK, f"test_cands_{test_tag}.parquet")
+    if os.path.exists(base_cache) and os.path.exists(cand_cache):
+        B0, C = pl.read_parquet(base_cache), pl.read_parquet(cand_cache)
+        log(f"reusing stage-1 test scores {base_cache}")
+    else:
+        base, cands = [], []
+        for c in s1["country"].unique().sort().to_list():
+            pairs = []
+            for fpath in sorted(glob.glob(os.path.join(d, f"{c}_*.parquet"))):
+                p = pl.read_parquet(fpath)
+                p = p.with_columns(p1=pl.Series(np.mean([m.predict(X(p, FEATURES)) for m in m1], axis=0), dtype=pl.Float32))
+                base.append(topk(p))
+                pairs.append(p.select("s", "q"))
+            P = pl.concat(pairs)
+            cands.append(P.group_by("s").agg(pl.col("q").unique().sort()))
+            log(f"{c}: {P.height} candidate pairs")
+            del P, pairs
+        B0, C = pl.concat(base), pl.concat(cands)
+        del base, cands
+        B0.write_parquet(base_cache)
+        C.write_parquet(cand_cache)
+    B = stage2_features(B0, qinfo)
+    del B0
+    cols2 = res.get("cols2", FEATURES + S2FEATS)
+    if any(c in cols2 for c in SIBFEATS):
+        B = sibling_features(B, load_qattr("test"))
     B = B.with_columns(p2=pl.Series(np.mean([m.predict(X(B, cols2)) for m in m2], axis=0), dtype=pl.Float32))
     prob = "p2" if res["use_stage2"] else "p1"
     dec = res["decision"] if res["use_stage2"] else {"type": "thr", "t": res["stage1_global"][0]}
@@ -379,7 +443,7 @@ def predict(model_tag, test_tag):
     B.select("q", "s", "p1", "p2").write_parquet(os.path.join(WORK, f"test_scores_{model_tag}.parquet"))
     ids = s1.select("s", source1_entity_id="s1_id")
     for df, name, col in ((M.group_by("s").agg(pl.col("q").sort()), "matching_results.tsv", "matched_entity_ids"),
-                          (pl.concat(cands), "candidate_pairs.tsv", "candidate_entity_ids")):
+                          (C, "candidate_pairs.tsv", "candidate_entity_ids")):
         df = df.with_columns(pl.col("q").list.eval(int_to_id("")).list.join(",").alias(col)).select("s", col)
         out = ids.join(df, on="s", how="left").with_columns(pl.col(col).fill_null("")).select("source1_entity_id", col)
         out.write_csv(os.path.join(OUT, name), separator="\t", quote_style="never")
@@ -391,6 +455,6 @@ if __name__ == "__main__":
     if cmd == "build":
         build(sys.argv[2], sys.argv[3], float(sys.argv[4]) if len(sys.argv) > 4 else None)
     elif cmd == "train":
-        train(sys.argv[2])
+        train(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "")
     elif cmd == "predict":
         predict(sys.argv[2], sys.argv[3])

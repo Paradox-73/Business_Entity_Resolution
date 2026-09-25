@@ -24,8 +24,8 @@ import numpy as np
 import polars as pl
 from common import WORK, log, read_truth, id_to_int, macro_f05_df
 
-OUT = os.path.join(WORK, "ce")
-FT = os.path.join(OUT, "model")
+OUT = os.environ.get("BER_CE_DIR", os.path.join(WORK, "ce"))          # rows/scores for one base model
+FT = os.environ.get("BER_CE_MODEL", os.path.join(WORK, "ce", "model"))  # the trained transformer (shared)
 LO, HI, P1_2ND = 0.01, 0.995, 0.2
 MAXLEN = 128
 LIMIT = int(os.environ.get("BER_CE_LIMIT", "0"))      # smoke test: > 0 = only this many rows per step

@@ -34,8 +34,9 @@ ROUNDS1 = 600
 PARAMS2 = dict(PARAMS1, num_leaves=127, learning_rate=0.05)
 ROUNDS2 = 500
 TOPK2 = 2
-SAMPLE_RATE = {"full": 0.10, "s10": 0.8}
+SAMPLE_RATE = {"full": 0.06, "s10": 0.4}   # keeps the stage-1 sample near 7-8M rows (16 GB RAM)
 SEG_COLS = ["addr_missing", "name_nonlatin", "src"]
+SEG_PASSES = 0   # per-segment threshold search: 0 = off (gave +0.0000 on s10, exp 5) and is slow at full scale
 S2FEATS = ["p1", "p1_rank", "p1_margin", "s_in_cnt", "s_in_sum", "s_in_max_other", "s_in_same_src",
            "q_rank_in_s", "s_base_cnt"]
 
@@ -126,7 +127,6 @@ def stage2_features(b, qinfo):
     b = b.with_columns(p1_rank=pl.col("p1").rank("ordinal", descending=True).over("q").cast(pl.Float32))
     b = b.with_columns(p1_margin=pl.col("p1") - pl.when(pl.len().over("q") > 1)
                        .then(pl.col("p1").sum().over("q") - pl.col("p1")).otherwise(0.0))
-    b = b.join(qinfo.select("q", "src"), on="q", how="left")
     top = b.filter(pl.col("p1_rank") == 1)
     hi = (pl.col("p1") >= 0.5).cast(pl.Float32)
     g = top.group_by("s").agg(cnt=hi.sum(), sm=pl.col("p1").sum(), m1=pl.col("p1").max(),
@@ -144,7 +144,7 @@ def stage2_features(b, qinfo):
         s_in_same_src=pl.col("cs") - self_hi,
         q_rank_in_s=pl.col("p1").rank("ordinal", descending=True).over("s").cast(pl.Float32),
         s_base_cnt=pl.len().over("s").cast(pl.Float32),
-    ).drop("cnt", "sm", "m1", "m2", "n", "cs", "src")
+    ).drop("cnt", "sm", "m1", "m2", "n", "cs")
     return b
 
 
@@ -156,6 +156,39 @@ def decide(b, prob, thr, qinfo):
     t = seg.replace_strict(thr, default=thr.get("default", 0.5), return_dtype=pl.Float64) if isinstance(thr, dict) \
         else pl.lit(thr)
     return top.filter(pl.col(prob) >= t).select("s", "q")
+
+
+def decide_expf(b, prob, floor, alpha):
+    """Per S1: among S2/S3 rows whose best S1 it is (prob >= floor), pick the top-k set that maximises
+    expected F0.5 ~ 1.25*sum(p_1..k) / (k + 0.25*sum(p_all)), versus predicting nothing (prod(1-p)).
+    Returns DataFrame s, q."""
+    c = (b.sort(prob, descending=True).unique("q", keep="first").filter(pl.col(prob) >= floor)
+          .sort(["s", prob], descending=[False, True]).with_columns(pp=pl.col(prob) ** alpha))
+    c = c.with_columns(k=pl.int_range(1, pl.len() + 1).over("s"), cum=pl.col("pp").cum_sum().over("s"),
+                       tot=pl.col("pp").sum().over("s"),
+                       none=(1 - pl.col("pp")).clip(1e-9, 1).log().sum().over("s").exp())
+    c = c.with_columns(ef=1.25 * pl.col("cum") / (pl.col("k") + 0.25 * pl.col("tot")))
+    best = c.group_by("s").agg(bk=pl.col("k").sort_by("ef", descending=True).first(), bef=pl.col("ef").max())
+    return (c.join(best, on="s").filter((pl.col("k") <= pl.col("bk")) & (pl.col("bef") > pl.col("none")))
+             .select("s", "q"))
+
+
+def apply_decision(b, prob, dec, qinfo):
+    if dec["type"] == "expf":
+        return decide_expf(b, prob, dec["floor"], dec["alpha"])
+    return decide(b, prob, dec["t"], qinfo)
+
+
+def tune_decision(b, prob, truth, s1e, g, gscore):
+    """Compare the global threshold g with expected-F0.5 set selection; return the better rule."""
+    best, dec = gscore, {"type": "thr", "t": g}
+    for floor in (0.3, 0.5):
+        for alpha in (1.0, 1.5):
+            sc = macro_f05_df(decide_expf(b, prob, floor, alpha), truth, s1e)
+            log(f"   expF floor={floor} alpha={alpha}: {sc:.5f}")
+            if sc > best + 1e-6:
+                best, dec = sc, {"type": "expf", "floor": floor, "alpha": alpha}
+    return dec, best
 
 
 def tune(b, prob, truth, s1e, qinfo):
@@ -174,7 +207,7 @@ def tune(b, prob, truth, s1e, qinfo):
     thr = {s: g for s in segs}
     thr["default"] = g
     best = gs[g]
-    for _ in range(2):
+    for _ in range(SEG_PASSES):
         for s in segs:
             for t in grid:
                 cand = dict(thr, **{s: t})
@@ -194,6 +227,25 @@ def train(tag):
     te = t.join(s1e, on="s")
     log(f"train {tag}: {len(files)} chunk files, eval S1 {s1e.height}, eval true pairs {te.height}")
 
+    md = os.path.join(WORK, "models", tag)
+    os.makedirs(md, exist_ok=True)
+    cache = os.path.join(md, "stage1_base.parquet")
+    if os.path.exists(cache):
+        # stage 1 already done for this tag: reuse models + top-K table
+        models1 = [lgb.Booster(model_file=os.path.join(md, f"s1_f{i}.txt")) for i in range(N_FOLDS)]
+        B = pl.read_parquet(cache)
+        s1stats = json.load(open(os.path.join(md, "stage1.json")))
+        found, npairs = s1stats["found"], s1stats["npairs"]
+        nq = qinfo.height
+        g1, gs1, sc1 = s1stats["g1"], s1stats["gs1"], s1stats["sc1"]
+        log(f"reusing stage 1 from {cache}: OOF {gs1:.4f}")
+    else:
+        B, models1, found, npairs, g1, gs1, sc1 = stage1(files, qmap, rate, s1e, te, qinfo, md)
+        nq = qinfo.height
+    return train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1, sc1)
+
+
+def stage1(files, qmap, rate, s1e, te, qinfo, md):
     # ---- stage 1: training sample
     parts = [attach(pl.read_parquet(f), qmap, rate) for f in files]
     S = pl.concat(parts)
@@ -206,7 +258,12 @@ def train(tag):
         log(f"stage-1 fold {f} trained on {tr.height}")
     imp = sorted(zip(FEATURES, sum(m.feature_importance("gain") for m in models1)), key=lambda x: -x[1])
     log("stage-1 top features:", [(a, int(b)) for a, b in imp[:20]])
-    del S, tr
+    del tr
+    # one model on the whole sample, used for TEST (3x cheaper to apply than averaging fold models)
+    lgb.train(PARAMS1, lgb.Dataset(X(S, FEATURES), S["label"].to_numpy()), ROUNDS1).save_model(
+        os.path.join(md, "s1_full.txt"))
+    log("stage-1 full-sample model saved")
+    del S
 
     # ---- stage 1: OOF over every pair; keep top-K per q
     base, found, npairs = [], 0, 0
@@ -214,7 +271,7 @@ def train(tag):
     for fpath in files:
         p = attach(pl.read_parquet(fpath), qmap)
         npairs += p.height
-        found += int(p.filter(pl.col("label") & pl.col("s").is_in(evs)).height)
+        found += int(p.filter(pl.col("label") & pl.col("s").is_in(evs.implode())).height)
         p1 = np.zeros(p.height, np.float32)
         fold = p["fold"].to_numpy()
         for f in range(N_FOLDS):
@@ -229,7 +286,15 @@ def train(tag):
     log(f"pairs {npairs} ({npairs / nq:.1f} per S2/S3 row); recall ceiling on eval S1: {found / te.height:.4f}")
     th1, sc1, (g1, gs1) = tune(B, "p1", te, s1e, qinfo)
     log(f"STAGE-1 OOF macro F0.5: global t={g1} -> {gs1:.4f}; segment thresholds -> {sc1:.4f}")
+    for i, m in enumerate(models1):
+        m.save_model(os.path.join(md, f"s1_f{i}.txt"))
+    B.write_parquet(os.path.join(md, "stage1_base.parquet"))
+    json.dump({"found": found, "npairs": npairs, "g1": g1, "gs1": gs1, "sc1": sc1, "th1": th1},
+              open(os.path.join(md, "stage1.json"), "w"), indent=1)
+    return B, models1, found, npairs, g1, gs1, sc1
 
+
+def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1, sc1):
     # ---- stage 2
     B = stage2_features(B, qinfo)
     cols2 = FEATURES + S2FEATS
@@ -247,17 +312,18 @@ def train(tag):
     log("stage-2 top features:", [(a, int(b)) for a, b in imp2[:15]])
     th2, sc2, (g2, gs2) = tune(B, "p2", te, s1e, qinfo)
     log(f"STAGE-2 OOF macro F0.5: global t={g2} -> {gs2:.4f}; segment thresholds -> {sc2:.4f}")
-    log("segment thresholds:", th2)
+    dec, sc_dec = tune_decision(B, "p2", te, s1e, g2, gs2)
+    log(f"DECISION: {dec} -> {sc_dec:.5f}")
 
-    md = os.path.join(WORK, "models", tag)
-    os.makedirs(md, exist_ok=True)
-    for i, m in enumerate(models1):
-        m.save_model(os.path.join(md, f"s1_f{i}.txt"))
     for i, m in enumerate(models2):
         m.save_model(os.path.join(md, f"s2_f{i}.txt"))
+    tr = B.filter(pl.col("eligible"))
+    lgb.train(PARAMS2, lgb.Dataset(X(tr, cols2), tr["label"].to_numpy()), ROUNDS2).save_model(
+        os.path.join(md, "s2_full.txt"))
+    del tr
     res = {"tag": tag, "recall_ceiling": found / te.height, "pairs_per_q": npairs / nq,
            "stage1_global": [g1, gs1], "stage1_seg": sc1, "stage2_global": [g2, gs2], "stage2_seg": sc2,
-           "thresholds": th2, "use_stage2": sc2 >= sc1}
+           "thresholds": th2, "use_stage2": sc2 >= sc1, "decision": dec, "decision_score": sc_dec}
     json.dump(res, open(os.path.join(md, "result.json"), "w"), indent=1)
     B.select("q", "s", "p1", "p2", "label", "fold").write_parquet(os.path.join(md, "oof.parquet"))
     log("saved", md, res)
@@ -267,8 +333,13 @@ def train(tag):
 def predict(model_tag, test_tag):
     md = os.path.join(WORK, "models", model_tag)
     res = json.load(open(os.path.join(md, "result.json")))
-    m1 = [lgb.Booster(model_file=os.path.join(md, f"s1_f{i}.txt")) for i in range(N_FOLDS)]
-    m2 = [lgb.Booster(model_file=os.path.join(md, f"s2_f{i}.txt")) for i in range(N_FOLDS)]
+    def models(stage):
+        full = os.path.join(md, f"s{stage}_full.txt")
+        if os.path.exists(full):
+            return [lgb.Booster(model_file=full)]
+        return [lgb.Booster(model_file=os.path.join(md, f"s{stage}_f{i}.txt")) for i in range(N_FOLDS)]
+    m1, m2 = models(1), models(2)
+    log(f"test models: stage 1 x{len(m1)}, stage 2 x{len(m2)}")
     d = pairs_dir(test_tag)
     s1 = pl.read_parquet(os.path.join(d, "s1.parquet"))
     qinfo = pl.read_parquet(os.path.join(d, "q.parquet")).drop("country")
@@ -289,8 +360,9 @@ def predict(model_tag, test_tag):
     cols2 = FEATURES + S2FEATS
     B = B.with_columns(p2=pl.Series(np.mean([m.predict(X(B, cols2)) for m in m2], axis=0), dtype=pl.Float32))
     prob = "p2" if res["use_stage2"] else "p1"
-    thr = res["thresholds"] if res["use_stage2"] else res["stage1_global"][0]
-    M = decide(B, prob, thr, qinfo)
+    dec = res["decision"] if res["use_stage2"] else {"type": "thr", "t": res["stage1_global"][0]}
+    M = apply_decision(B, prob, dec, qinfo)
+    log(f"decision {prob} {dec}: {M.height} matches")
     B.select("q", "s", "p1", "p2").write_parquet(os.path.join(WORK, f"test_scores_{model_tag}.parquet"))
     ids = s1.select("s", source1_entity_id="s1_id")
     for df, name, col in ((M.group_by("s").agg(pl.col("q").sort()), "matching_results.tsv", "matched_entity_ids"),

@@ -140,9 +140,10 @@ class CountryIndex:
             loc = np.full(q.height, -1)
             loc[qe_rows] = np.arange(len(qe_rows))
             m = loc[qi] >= 0
-            for a in range(0, int(m.sum()), 1_000_000):
-                sel = np.flatnonzero(m)[a:a + 1_000_000]
-                emb_cos[sel] = (QE[loc[qi[sel]]].float() * self.E[si[sel]].float()).sum(1).cpu().numpy()
+            nz = np.flatnonzero(m)
+            for a in range(0, len(nz), 200_000):
+                sel = nz[a:a + 200_000]
+                emb_cos[sel] = (QE[loc[qi[sel]]] * self.E[si[sel]]).float().sum(1).cpu().numpy()
         cols["emb_cos"] = emb_cos
         p = pl.DataFrame(cols).join(q, on="q_row").join(self.s1, on="s_row", suffix="_s")
         p = add_features(p)

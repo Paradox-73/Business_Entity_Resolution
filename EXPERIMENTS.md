@@ -219,6 +219,7 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 - Widening the close-call band would gain almost nothing. The next unreachable block needs stage 1 to keep more than 2 candidates per record.
 
 ## Lessons (read before changing anything)
+- **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
 - A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.

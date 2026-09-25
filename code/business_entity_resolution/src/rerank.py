@@ -285,6 +285,7 @@ def stage3():
         msk = (r["fold"] == f).to_numpy()
         p3[msk] = mdl.predict(xgb.DMatrix(r.filter(pl.Series(msk)).select(S3FEATS).to_numpy()))
     r = r.with_columns(p3=pl.Series(p3))
+    r.select("q", "s", "p3", "label", "fold").write_parquet(os.path.join(OUT, f"oof_s3{tagx}.parquet"))  # for blending
     # held-out: p2 replaced by p3 on the close-call rows that have an out-of-sample transformer score
     oof = pl.read_parquet(os.path.join(WORK, "models", md, "oof.parquet"), columns=["q", "s", "p2"]).with_columns(
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))

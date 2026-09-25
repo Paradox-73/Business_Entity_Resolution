@@ -13,6 +13,27 @@ _T0 = time.time()
 SRC_MULT = 10_000_000_000   # integer id = source * SRC_MULT + numeric part of the id
 
 
+def _no_power_throttling():
+    """Windows 11 puts windowless background processes on the slow efficiency cores of hybrid CPUs (EcoQoS);
+    26 Sep: transformer training ran at 2.3 steps/s throttled vs 11.6 unthrottled. Opt this process out."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class State(ctypes.Structure):
+            _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG), ("StateMask", wintypes.ULONG)]
+        k = ctypes.WinDLL("kernel32")
+        st = State(1, 0x1 | 0x4, 0)             # execution speed + timer resolution: control on, throttling off
+        k.SetProcessInformation(wintypes.HANDLE(k.GetCurrentProcess()), 4, ctypes.byref(st), ctypes.sizeof(st))
+    except Exception:
+        pass
+
+
+_no_power_throttling()
+
+
 def log(*a):
     """Print with elapsed seconds since start."""
     print(f"[{time.time() - _T0:7.1f}s]", *a, flush=True)

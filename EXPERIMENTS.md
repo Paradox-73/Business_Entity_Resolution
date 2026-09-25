@@ -199,6 +199,12 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 - No-address records whose true S1 shares its core name with 2-60 S1 rows (random pick right 26.2%): closest ID 26.4%, most other records 23.1%, closest raw name (legal form, punctuation kept) 42.3%. Only the raw name carries signal, too weak to pay under F0.5.
 - No-address share: train US 3.6% / India 3.0%; test US 2.9% / India 2.4% / France 3.0%.
 
+### Night 25->26 Sep results
+| Run | Held-out macro F0.5 (FULL eval S1) | Decision |
+|---|---|---|
+| Transformer reranker (multilingual-e5-small cross-encoder, word table frozen, 827k close-call rows of the non-eval half, 1 epoch) + stage-3 XGBoost on v6 (full_cons) p2 | GBDT 0.98094-0.98114 -> **0.98794** at threshold 0.65 (+0.0068); stage-3 gain: transformer score 6.0M vs p2 1.2M | **v7** = this + France legal-form veto (1,633,377 S1 rows with matches) |
+| Stage 2 trained on all Latin-name labels (both halves), rate 1.0, sibling features | 0.98089 vs v3 0.98015 (+0.0007) | candidate for combining with the reranker |
+
 ## Lessons (read before changing anything)
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.

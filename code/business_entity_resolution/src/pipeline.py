@@ -33,6 +33,53 @@ PARAMS1 = dict(objective="binary", learning_rate=0.08, num_leaves=255, min_data_
 ROUNDS1 = 600
 PARAMS2 = dict(PARAMS1, num_leaves=127, learning_rate=0.05)
 ROUNDS2 = 500
+# model backend: "xgb" = XGBoost on the GPU (default; ~8x faster to score than CPU LightGBM), "lgb" = CPU LightGBM.
+# XGBoost 2.0.3 is pinned: it is the last build that runs on CUDA 11 drivers (this laptop: driver 511, CUDA 11.6).
+BACKEND = os.environ.get("BER_BACKEND", "xgb")          # stage 1
+BACKEND2 = os.environ.get("BER_BACKEND2", BACKEND)      # stage 2 (can differ, e.g. reuse a cached LightGBM stage 1)
+XGB_PARAMS = {1: dict(tree_method="hist", device="cuda", objective="binary:logistic", eta=0.08, max_depth=10,
+                      min_child_weight=20, subsample=0.7, colsample_bytree=0.8, reg_lambda=1.0, max_bin=256, seed=7),
+              2: dict(tree_method="hist", device="cuda", objective="binary:logistic", eta=0.05, max_depth=8,
+                      min_child_weight=20, subsample=0.7, colsample_bytree=0.8, reg_lambda=1.0, max_bin=256, seed=7)}
+EXT = ".json" if BACKEND == "xgb" else ".txt"
+EXT2 = ".json" if BACKEND2 == "xgb" else ".txt"
+
+
+def fit(stage, Xm, y):
+    if (BACKEND if stage == 1 else BACKEND2) == "xgb":
+        import xgboost as xgb
+        return xgb.train(XGB_PARAMS[stage], xgb.QuantileDMatrix(Xm, y), ROUNDS1 if stage == 1 else ROUNDS2)
+    return lgb.train(PARAMS1 if stage == 1 else PARAMS2, lgb.Dataset(Xm, y), ROUNDS1 if stage == 1 else ROUNDS2)
+
+
+def score(m, Xm):
+    if isinstance(m, lgb.Booster):
+        return m.predict(Xm)
+    import xgboost as xgb
+    out = np.empty(len(Xm), np.float32)
+    for a in range(0, len(Xm), 2_000_000):          # batches keep GPU memory under 4 GB
+        out[a:a + 2_000_000] = m.predict(xgb.DMatrix(Xm[a:a + 2_000_000]))
+    return out
+
+
+def load_model(path_noext):
+    if os.path.exists(path_noext + ".json"):
+        import xgboost as xgb
+        m = xgb.Booster()
+        m.load_model(path_noext + ".json")
+        m.set_param({"device": "cuda"})
+        return m
+    return lgb.Booster(model_file=path_noext + ".txt")
+
+
+def importance(models, cols):
+    if isinstance(models[0], lgb.Booster):
+        return sorted(zip(cols, sum(m.feature_importance("gain") for m in models)), key=lambda x: -x[1])
+    tot = {}
+    for m in models:
+        for k, v in m.get_score(importance_type="total_gain").items():
+            tot[cols[int(k[1:])]] = tot.get(cols[int(k[1:])], 0) + v
+    return sorted(tot.items(), key=lambda x: -x[1])
 TOPK2 = 2
 # stage-1 training sample (rows, not whole records: group features are already computed at build time):
 # every matching pair + a share of "hard" non-matches (top-2 by name or address, or look-alike names)
@@ -281,12 +328,12 @@ def train(tag, variant=""):
     te = t.join(s1e, on="s")
     log(f"train {tag}: {len(files)} chunk files, eval S1 {s1e.height}, eval true pairs {te.height}")
 
-    md = os.path.join(WORK, "models", tag)
+    md = os.path.join(WORK, "models", tag + ("_xgb" if BACKEND == "xgb" else ""))
     os.makedirs(md, exist_ok=True)
     cache = os.path.join(md, "stage1_base.parquet")
     if os.path.exists(cache):
         # stage 1 already done for this tag: reuse models + top-K table
-        models1 = [lgb.Booster(model_file=os.path.join(md, f"s1_f{i}.txt")) for i in range(N_FOLDS)]
+        models1 = [load_model(os.path.join(md, f"s1_f{i}")) for i in range(N_FOLDS)]
         B = pl.read_parquet(cache)
         s1stats = json.load(open(os.path.join(md, "stage1.json")))
         found, npairs = s1stats["found"], s1stats["npairs"]
@@ -296,7 +343,7 @@ def train(tag, variant=""):
     else:
         B, models1, found, npairs, g1, gs1, sc1 = stage1(files, qmap, rate, s1e, te, qinfo, md)
         nq = qinfo.height
-    md2 = os.path.join(WORK, "models", f"{tag}_{variant}" if variant else tag)
+    md2 = f"{md}_{variant}" if variant else md
     os.makedirs(md2, exist_ok=True)
     return train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md2, g1, gs1, sc1, variant, md)
 
@@ -310,14 +357,13 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
     models1 = []
     for f in range(N_FOLDS):
         tr = S.filter(pl.col("fold") != f)
-        models1.append(lgb.train(PARAMS1, lgb.Dataset(X(tr, FEATURES), tr["label"].to_numpy()), ROUNDS1))
+        models1.append(fit(1, X(tr, FEATURES), tr["label"].to_numpy()))
         log(f"stage-1 fold {f} trained on {tr.height}")
-    imp = sorted(zip(FEATURES, sum(m.feature_importance("gain") for m in models1)), key=lambda x: -x[1])
+    imp = importance(models1, FEATURES)
     log("stage-1 top features:", [(a, int(b)) for a, b in imp[:20]])
     del tr
     # one model on the whole sample, used for TEST (3x cheaper to apply than averaging fold models)
-    lgb.train(PARAMS1, lgb.Dataset(X(S, FEATURES), S["label"].to_numpy()), ROUNDS1).save_model(
-        os.path.join(md, "s1_full.txt"))
+    fit(1, X(S, FEATURES), S["label"].to_numpy()).save_model(os.path.join(md, "s1_full" + EXT))
     log("stage-1 full-sample model saved")
     del S
 
@@ -333,7 +379,7 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
         for f in range(N_FOLDS):
             m = fold == f
             if m.any():
-                p1[m] = models1[f].predict(X(p.filter(pl.Series(m)), FEATURES))
+                p1[m] = score(models1[f], X(p.filter(pl.Series(m)), FEATURES))
         p = p.with_columns(p1=pl.Series(p1))
         base.append(topk(p))
     B = pl.concat(base)
@@ -343,7 +389,7 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
     th1, sc1, (g1, gs1) = tune(B, "p1", te, s1e, qinfo)
     log(f"STAGE-1 OOF macro F0.5: global t={g1} -> {gs1:.4f}; segment thresholds -> {sc1:.4f}")
     for i, m in enumerate(models1):
-        m.save_model(os.path.join(md, f"s1_f{i}.txt"))
+        m.save_model(os.path.join(md, f"s1_f{i}" + EXT))
     B.write_parquet(os.path.join(md, "stage1_base.parquet"))
     json.dump({"found": found, "npairs": npairs, "g1": g1, "gs1": gs1, "sc1": sc1, "th1": th1},
               open(os.path.join(md, "stage1.json"), "w"), indent=1)
@@ -363,13 +409,13 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
     for f in range(N_FOLDS):
         tr = B.filter((pl.col("fold") != f) & pl.col("eligible") &
                       ((pl.col("q").hash(seed=5) % 1000) < STAGE2_RATE.get(tag, 1.0) * 1000))
-        m = lgb.train(PARAMS2, lgb.Dataset(X(tr, cols2), tr["label"].to_numpy()), ROUNDS2)
+        m = fit(2, X(tr, cols2), tr["label"].to_numpy())
         models2.append(m)
         msk = (B["fold"] == f).to_numpy()
-        p2[msk] = m.predict(X(B.filter(pl.Series(msk)), cols2))
+        p2[msk] = score(m, X(B.filter(pl.Series(msk)), cols2))
         log(f"stage-2 fold {f} trained on {tr.height}")
     B = B.with_columns(p2=pl.Series(p2))
-    imp2 = sorted(zip(cols2, sum(m.feature_importance("gain") for m in models2)), key=lambda x: -x[1])
+    imp2 = importance(models2, cols2)
     log("stage-2 top features:", [(a, int(b)) for a, b in imp2[:15]])
     th2, sc2, (g2, gs2) = tune(B, "p2", te, s1e, qinfo)
     log(f"STAGE-2 OOF macro F0.5: global t={g2} -> {gs2:.4f}; segment thresholds -> {sc2:.4f}")
@@ -377,10 +423,9 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
     log(f"DECISION: {dec} -> {sc_dec:.5f}")
 
     for i, m in enumerate(models2):
-        m.save_model(os.path.join(md, f"s2_f{i}.txt"))
+        m.save_model(os.path.join(md, f"s2_f{i}" + EXT2))
     tr = B.filter(pl.col("eligible"))
-    lgb.train(PARAMS2, lgb.Dataset(X(tr, cols2), tr["label"].to_numpy()), ROUNDS2).save_model(
-        os.path.join(md, "s2_full.txt"))
+    fit(2, X(tr, cols2), tr["label"].to_numpy()).save_model(os.path.join(md, "s2_full" + EXT2))
     del tr
     res = {"tag": tag, "recall_ceiling": found / te.height, "pairs_per_q": npairs / nq,
            "stage1_global": [g1, gs1], "stage1_seg": sc1, "stage2_global": [g2, gs2], "stage2_seg": sc2,
@@ -397,10 +442,10 @@ def predict(model_tag, test_tag):
     res = json.load(open(os.path.join(md, "result.json")))
     def models(stage):
         d = res.get("stage1_dir", md) if stage == 1 else md
-        full = os.path.join(d, f"s{stage}_full.txt")
-        if os.path.exists(full):
-            return [lgb.Booster(model_file=full)]
-        return [lgb.Booster(model_file=os.path.join(d, f"s{stage}_f{i}.txt")) for i in range(N_FOLDS)]
+        full = os.path.join(d, f"s{stage}_full")
+        if os.path.exists(full + ".json") or os.path.exists(full + ".txt"):
+            return [load_model(full)]
+        return [load_model(os.path.join(d, f"s{stage}_f{i}")) for i in range(N_FOLDS)]
     m1, m2 = models(1), models(2)
     log(f"test models: stage 1 x{len(m1)}, stage 2 x{len(m2)}")
     d = pairs_dir(test_tag)
@@ -420,7 +465,7 @@ def predict(model_tag, test_tag):
             pairs = []
             for fpath in sorted(glob.glob(os.path.join(d, f"{c}_*.parquet"))):
                 p = pl.read_parquet(fpath)
-                p = p.with_columns(p1=pl.Series(np.mean([m.predict(X(p, FEATURES)) for m in m1], axis=0), dtype=pl.Float32))
+                p = p.with_columns(p1=pl.Series(np.mean([score(m, X(p, FEATURES)) for m in m1], axis=0), dtype=pl.Float32))
                 base.append(topk(p))
                 pairs.append(p.select("s", "q"))
             P = pl.concat(pairs)
@@ -436,7 +481,7 @@ def predict(model_tag, test_tag):
     cols2 = res.get("cols2", FEATURES + S2FEATS)
     if any(c in cols2 for c in SIBFEATS):
         B = sibling_features(B, load_qattr("test"))
-    B = B.with_columns(p2=pl.Series(np.mean([m.predict(X(B, cols2)) for m in m2], axis=0), dtype=pl.Float32))
+    B = B.with_columns(p2=pl.Series(np.mean([score(m, X(B, cols2)) for m in m2], axis=0), dtype=pl.Float32))
     prob = "p2" if res["use_stage2"] else "p1"
     dec = res["decision"] if res["use_stage2"] else {"type": "thr", "t": res["stage1_global"][0]}
     M = apply_decision(B, prob, dec, qinfo)

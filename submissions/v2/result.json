@@ -1,0 +1,33 @@
+{
+ "tag": "full",
+ "recall_ceiling": 0.9850924866489124,
+ "pairs_per_q": 30.910522925918528,
+ "stage1_global": [
+  0.925,
+  0.9724252482968835
+ ],
+ "stage1_seg": 0.9724252482968835,
+ "stage2_global": [
+  0.575,
+  0.9787956535742931
+ ],
+ "stage2_seg": 0.9787956535742931,
+ "thresholds": {
+  "false|false|2": 0.575,
+  "false|false|3": 0.575,
+  "true|false|2": 0.575,
+  "false|true|3": 0.575,
+  "true|true|3": 0.575,
+  "true|false|3": 0.575,
+  "true|true|2": 0.575,
+  "false|true|2": 0.575,
+  "default": 0.575
+ },
+ "use_stage2": true,
+ "decision": {
+  "type": "expf",
+  "floor": 0.3,
+  "alpha": 1.0
+ },
+ "decision_score": 0.9790443224948158
+}

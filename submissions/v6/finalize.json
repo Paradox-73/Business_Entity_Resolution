@@ -1,0 +1,17 @@
+{
+ "model": "full_cons",
+ "scores": [
+  "E:\\Projects\\Amazon ML Challenge\\work\\test_scores_full_cons.parquet:US,India",
+  "E:\\Projects\\Amazon ML Challenge\\work\\test_scores_full_cons_testfr.parquet:France"
+ ],
+ "calib": {
+  "default": {
+   "type": "expf",
+   "floor": 0.3,
+   "alpha": 1.0,
+   "prob": "p2"
+  }
+ },
+ "oof_base": 0.98151,
+ "oof_best": 0.98151
+}

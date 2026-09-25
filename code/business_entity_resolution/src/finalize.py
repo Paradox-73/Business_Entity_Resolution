@@ -16,7 +16,8 @@ from common import WORK, log, id_to_int, int_to_id
 from pipeline import decide_expf
 
 md, out_dir, files = os.path.join(WORK, "models", sys.argv[1]), sys.argv[2], sys.argv[3:]
-cal = json.load(open(os.path.join(md, "calib.json")))
+# BER_CALIB=<file in the model dir> picks another rule file, e.g. raw_rule.json = uncalibrated p2 (v3's rule)
+cal = json.load(open(os.path.join(md, os.environ.get("BER_CALIB", "calib.json"))))
 s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
     s=id_to_int("entity_id"), s1_id="entity_id", country="country")
 def load_scores(spec):
@@ -33,7 +34,8 @@ dup = B.group_by("q").agg(pl.col("country").n_unique().alias("k")).filter(pl.col
 assert dup == 0, f"{dup} records have candidates in two countries"
 nf = B.select(pl.struct("q", "s").is_duplicated().sum()).item()
 assert nf == 0, f"{nf} duplicated (q, s) rows: a country appears in two score files"
-B = B.with_columns(pc=pl.Series(np.interp(B["p2"].to_numpy(), cal["x"], cal["y"]).astype(np.float32)))
+if cal.get("x"):
+    B = B.with_columns(pc=pl.Series(np.interp(B["p2"].to_numpy(), cal["x"], cal["y"]).astype(np.float32)))
 parts = []
 for c in s1["country"].unique().sort().to_list():
     rule = cal["decision"].get(c, cal["decision"]["default"])

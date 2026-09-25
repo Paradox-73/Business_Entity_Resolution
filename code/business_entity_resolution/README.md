@@ -1,29 +1,34 @@
-# Business Entity Resolution — pipeline
+# Business Entity Resolution — pipeline (v2)
 
-Python 3.12, CPU only (16 GB RAM laptop is enough; ~1.5 h end to end).
+Python 3.12. One laptop is enough: 16 GB RAM, any 4 GB+ NVIDIA GPU (used only for the embedding model).
+End-to-end runtime on an RTX 3050 laptop: ~8 h (most of it building features for 10M train + 10M test records).
 
 ```bash
 pip install -r requirements.txt
+pip install torch --index-url https://download.pytorch.org/whl/cu118   # GPU build of PyTorch
 cd src
 # expects the dataset at ../../../student_resource/dataset (override with BER_DATA=...)
-python learn_maps.py        # learn address short forms + local-script state names from TRAIN pairs -> work/maps.json
-python prep.py              # clean all 6 source files -> work/*.parquet
-python pipeline.py dev 0.1  # validate on 10% of TRAIN: blocking recall, OOF macro F0.5, threshold; trains work/model.txt
-python pipeline.py test     # run on TEST -> output/matching_results.tsv, output/candidate_pairs.tsv
+python learn_maps.py                    # address short forms + local-script state names, learned from TRAIN pairs -> work/maps.json
+python prep.py                          # clean all 6 source files -> work/*.parquet
+python embed.py train                   # fine-tune multilingual-e5-small on non-Latin train names -> work/e5_ft_addr/
+python embed.py encode                  # embeddings for S1 rows + non-Latin S2/S3 rows -> work/emb/
+python pipeline.py build train full     # shortlist + features for all of TRAIN -> work/pairs/full/
+python pipeline.py train full           # stage-1 + stage-2 LightGBM, out-of-fold validation, decision rule -> work/models/full/
+python pipeline.py build test test      # shortlist + features for TEST -> work/pairs/test/
+python pipeline.py predict full test    # -> output/matching_results.tsv, output/candidate_pairs.tsv
 ```
 
 Folders can be changed with env vars `BER_DATA`, `BER_WORK`, `BER_OUT`.
+Analysis tools: `error_analysis.py <tag>` (points lost per mistake type), `blocking_exp.py <country> <n>` (shortlist recall/time at full density), `embed.py eval`.
 
 ## Files
-- `common.py` — paths, TSV reading, the macro F0.5 metric.
+- `common.py` — paths, TSV reading, integer id encoding, the macro F0.5 metric.
 - `normalize.py` — name/address cleaning (accents, web domains, d/b/a aliases, legal forms, junk tokens, numbers).
-- `learn_maps.py` — learns normalisation tables from training matches only.
-- `candidates.py` — blocking (char-3-gram TF-IDF on name and address, top-10 each, same country) + pair features.
-- `pipeline.py` — LightGBM pair model, out-of-fold validation, threshold tuning, test inference, output files.
+- `learn_maps.py` — normalisation tables learned from training matches only.
+- `embed.py` — fine-tuned multilingual embedding for non-Latin-script names.
+- `candidates.py` — blocking (name char-3-grams, address words, name+address words, embeddings; same country) + 57 pair features.
+- `pipeline.py` — build / train / predict: two-stage LightGBM, grouped 3-fold OOF validation, expected-F0.5 set selection.
 
-## Method (v1)
-1. Blocking from each S2/S3 row to S1 rows of the same country; union of name top-10 and address top-10.
-2. 40 pair features: TF-IDF cosines, fuzzy name/address similarities, house-number agreement, lengths,
-   flags (domain, alias, non-Latin script, missing address), chain-name count, competition among a row's candidates.
-3. LightGBM binary classifier.
-4. Each S2/S3 row is assigned to its single best S1 candidate if probability >= tuned threshold.
+## Models and licences
+- `intfloat/multilingual-e5-small` — MIT, 118M parameters (fine-tuned here).
+- LightGBM — MIT. No external data, APIs or lookups.

@@ -80,6 +80,17 @@ Build: 42 chunks, ~100–130 s each (~85 min), 9.1 GB of features on disk.
 | name+address word 1-2 grams, cap 5000, top 10 / top 20 | 0.976 / 0.982 | 5 s |
 | **chosen:** name char3 k10 + address word k10 + name+address word k20 | **US 0.9856**, **India 0.9593** (+ embedding search for non-Latin names, which the India number excludes) | ~14 s |
 
+### Run 9 — FULL with the new blocking (25 Sep 08:52–12:55)
+Build 145 min (42 chunks, ~31 candidates per S2/S3 row, 319M pairs). Stage-1 sample 11.5M rows / 3.76M positives.
+
+| Stage | Recall ceiling | OOF macro F0.5 (1.1M eval S1, full density) |
+|---|---|---|
+| Stage 1 (t=0.925) | **0.9851** (exp 7: 0.7968) | 0.9724 |
+| Stage 2 (t=0.575) | 0.9851 | 0.9788 (+0.0064; S1-side competition matters much more at full density than on S10, where it gave +0.0014) |
+| Expected-F0.5 set selection (floor 0.3, alpha 1.0) | 0.9851 | **0.97904** — chosen |
+
+Note: S10 scores (0.9877) were optimistic; FULL (0.9790) is the honest estimate for test density.
+
 **Decision (exp 8):** replace address char-3-gram search with word 1-2-gram search; add name+address word search (top 20); keep name char3 (top 10, top 30 without address) and the embedding search. New features: `cos_addr_w`, `cos_comb_w` (+ margin, rank), `from_comb`. One US chunk at full density: search 77 s + features 104 s, ~31 candidates per row. Rebuilding FULL train and test with it (~6.5 h chain, `work/run_all.sh`).
 
 ## Lessons (read before changing anything)

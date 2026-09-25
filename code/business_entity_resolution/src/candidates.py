@@ -3,9 +3,11 @@
 Blocking, searched from each S2/S3 row towards S1 rows of the SAME country (union of):
   - name:      TF-IDF over char 3-grams of the space-free core name, top K_NAME
                 (top K_NAME_NOADDR when the S2/S3 row has no address: name is its only evidence)
-  - address:   TF-IDF over char 3-grams of the cleaned address, top K_ADDR
+  - address:   TF-IDF over word 1-2 grams of the cleaned address, top K_ADDR
+  - combined:  TF-IDF over word 1-2 grams of core name + address, top K_COMB
   - embedding: for non-Latin-script names only, fine-tuned multilingual e5 (embed.py), top K_EMB
-Search matrices drop 3-grams shared by more than MAX_DF_* S1 rows (keeps search cost bounded);
+Search matrices drop terms shared by more than MAX_DF_* S1 rows (keeps search cost bounded; word-level
+terms stay informative at full density, char 3-grams of addresses do not - EXPERIMENTS.md exp 7);
 similarity FEATURES use the full vocabulary.
 """
 import os
@@ -23,9 +25,10 @@ from common import WORK, log
 K_NAME = 10
 K_NAME_NOADDR = 30
 K_ADDR = 10
+K_COMB = 20
 K_EMB = 10
 MAX_DF_NAME = 4000
-MAX_DF_ADDR = 2000
+MAX_DF_WORD = 5000
 CHUNK = 250_000
 THREADS = 11
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
@@ -38,6 +41,15 @@ _ALNUM = r"[a-z0-9]*\d[a-z0-9]*(?:[/\-][a-z0-9]+)*"
 def _vec(max_df):
     return TfidfVectorizer(analyzer="char", ngram_range=(3, 3), min_df=2, max_df=max_df,
                            sublinear_tf=True, dtype=np.float32, lowercase=False)
+
+
+def _wvec(max_df):
+    return TfidfVectorizer(analyzer="word", ngram_range=(1, 2), token_pattern=r"\S+", min_df=2, max_df=max_df,
+                           sublinear_tf=True, dtype=np.float32, lowercase=False)
+
+
+def _comb(df):
+    return (df["name_core"] + " " + df["addr"]).to_list()
 
 
 def _pad(series):
@@ -73,9 +85,10 @@ class CountryIndex:
         self.s1 = (s1.select(S_COLS).with_row_index("s_row")
                      .with_columns(s_name_count=pl.len().over("name_core").cast(pl.Float32),
                                    alnum=_alnum("business_address")))
-        self.vn, self.va = _vec(MAX_DF_NAME), _vec(MAX_DF_ADDR)
+        self.vn, self.va, self.vc = _vec(MAX_DF_NAME), _wvec(MAX_DF_WORD), _wvec(MAX_DF_WORD)
         self.Bn = self.vn.fit_transform(_pad(self.s1["name_ns"]))
-        self.Ba = self.va.fit_transform(_pad(self.s1["addr"]))
+        self.Ba = self.va.fit_transform(self.s1["addr"].to_list())
+        self.Bc = self.vc.fit_transform(_comb(self.s1))
         self.fn, self.fa = _vec(1.0), _vec(1.0)
         self.Fn = self.fn.fit_transform(_pad(self.s1["name_ns"]))
         self.Fa = self.fa.fit_transform(_pad(self.s1["addr"]))
@@ -111,14 +124,16 @@ class CountryIndex:
         q = q.select(Q_COLS).with_row_index("q_row").with_columns(alnum=_alnum("business_address"))
         t0 = time.time()
         An = self.vn.transform(_pad(q["name_ns"]))
-        Aa = self.va.transform(_pad(q["addr"]))
+        Aa = self.va.transform(q["addr"].to_list())
+        Ac = self.vc.transform(_comb(q))
         r1, c1 = _topn(An, self.Bn, K_NAME)
         r2, c2 = _topn(Aa, self.Ba, K_ADDR)
+        r3, c3 = _topn(Ac, self.Bc, K_COMB)
         noaddr = np.flatnonzero(q["addr_missing"].to_numpy())
         if len(noaddr):
             rr, cc = _topn(An[noaddr], self.Bn, K_NAME_NOADDR)
             r1, c1 = np.concatenate([r1, noaddr[rr]]), np.concatenate([c1, cc])
-        keys = [r1 * (1 << 32) + c1, r2 * (1 << 32) + c2]
+        keys = [r1 * (1 << 32) + c1, r2 * (1 << 32) + c2, r3 * (1 << 32) + c3]
         qe_rows, QE = self._emb(q)
         if QE is not None:
             re_, ce_ = [], []
@@ -133,8 +148,10 @@ class CountryIndex:
         Fqn, Fqa = self.fn.transform(_pad(q["name_ns"])), self.fa.transform(_pad(q["addr"]))
         cols = {"q_row": qi.astype(np.uint32), "s_row": si.astype(np.uint32),
                 "cos_name": _rowdot(Fqn, self.Fn, qi, si), "cos_addr": _rowdot(Fqa, self.Fa, qi, si),
+                "cos_addr_w": _rowdot(Aa, self.Ba, qi, si), "cos_comb_w": _rowdot(Ac, self.Bc, qi, si),
                 "from_name": np.isin(key, keys[0]), "from_addr": np.isin(key, keys[1]),
-                "from_emb": np.isin(key, keys[2]) if len(keys) > 2 else np.zeros(len(key), bool)}
+                "from_comb": np.isin(key, keys[2]),
+                "from_emb": np.isin(key, keys[3]) if len(keys) > 3 else np.zeros(len(key), bool)}
         emb_cos = np.full(len(key), np.nan, np.float32)
         if QE is not None:
             loc = np.full(q.height, -1)
@@ -201,7 +218,7 @@ def add_features(p):
         name_exact=(pl.col("name_core") == pl.col("name_core_s")),
     )
     # competition among the candidates of the same S2/S3 row
-    for c in ["cos_name", "cos_addr", "n_tset", "a_tset", "emb_cos"]:
+    for c in ["cos_name", "cos_addr", "n_tset", "a_tset", "emb_cos", "cos_comb_w"]:
         p = _margin(p, c)
         p = p.with_columns(pl.col(c).rank("ordinal", descending=True).over("q_row").cast(pl.Float32).alias(f"{c}_rank"))
     p = p.with_columns(emb_cos_rank=pl.when(pl.col("emb_cos").is_nan()).then(None).otherwise(pl.col("emb_cos_rank")))
@@ -211,7 +228,8 @@ def add_features(p):
     return p.select(["entity_id", "entity_id_s"] + FEATURES)
 
 
-FEATURES = ["cos_name", "cos_addr", "from_name", "from_addr", "from_emb", "emb_cos",
+FEATURES = ["cos_name", "cos_addr", "cos_addr_w", "cos_comb_w", "from_name", "from_addr", "from_comb",
+            "from_emb", "emb_cos",
             "n_ratio", "n_tset", "n_tsort", "n_partial", "n_jw", "n_full_ratio",
             "a_ratio", "a_tset", "a_partial",
             "num_q", "num_s", "num_common", "num_first_eq", "num_first_in", "num_first_prefix",
@@ -220,7 +238,8 @@ FEATURES = ["cos_name", "cos_addr", "from_name", "from_addr", "from_emb", "emb_c
             "src", "name_is_domain", "name_has_alias", "name_nonlatin", "addr_missing", "addr_nonlatin",
             "cos_name_margin", "cos_name_rank", "cos_addr_margin", "cos_addr_rank",
             "n_tset_margin", "n_tset_rank", "a_tset_margin", "a_tset_rank",
-            "emb_cos_margin", "emb_cos_rank", "n_cand", "n_name_hi", "n_addr_hi"]
+            "emb_cos_margin", "emb_cos_rank", "cos_comb_w_margin", "cos_comb_w_rank",
+            "n_cand", "n_name_hi", "n_addr_hi"]
 
 
 def country_pairs(s1, q, split, on_chunk):

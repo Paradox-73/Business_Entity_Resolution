@@ -55,6 +55,33 @@ Eval = all S10 S1 rows (they are all outside the embedding fine-tuning partition
 
 Error analysis of run 5 (`work/s10_errors.log`), points lost: wrong_s1 0.0045 (73% have NO address; chain names like "Perfect Food Pvt Ltd" at several S1 addresses), under_thresh 0.0043 (34% no address), decoy_merge 0.0036 (look like true matches: "Consolidated Médical Studios | 31 Laurel Circle" vs S1 "... | 315 Laurel Circle", p=0.99; likely irreducible), blocking_miss 0.0014 (31% no address). Non-Latin names are no longer a problem (0.2% of misses vs 60% in v1).
 
+## FULL setup (all 2.2M train S1, 10.3M S2/S3; eval = 1.1M S1 outside the embedding partition)
+Build: 42 chunks, ~100–130 s each (~85 min), 9.1 GB of features on disk.
+
+| # | Change | Stage-1 sample | Result | Decision |
+|---|---|---|---|---|
+| 6 | Record-level 6% sample (SAMPLE_RATE) | 7.2M rows, only **182k positives** | stopped before training | Record sampling throws away 94% of positives. Switched to row-level sampling |
+| 7 | Row-level: all eligible positives + 15% hard negatives (rank ≤ 2 by name cosine or address token-set, or name token-set ≥ 80) + 1.5% other negatives; stage 2 on 50% of records | 8.57M rows, 3.04M positives | **recall ceiling 0.7968, stage-1 F0.5 0.8482** | Blocking collapses at full density (US 0.742, India 0.879). Stopped. |
+
+**Root cause (exp 7):** the absolute 3-gram df caps (4000 name / 2000 address) introduced in run 2 for speed are 10x more aggressive at full density than on S10: at 1.3M US S1 rows, every city/street 3-gram exceeds 2000 docs and is dropped. S10 validation hid this (its S1 index is 10x smaller). **Test has full density (US 663k, India 810k S1), so v1 on test was also hurt.** Lesson: validate blocking at the same S1 density as test.
+
+### Blocking at full density (`src/blocking_exp.py`, 50k held-out US rows vs all 1.32M US S1)
+
+| Search | Recall | Search time / 50k rows |
+|---|---|---|
+| name char3, df cap 4000, top 10 | 0.555 | 6 s |
+| name char3, df cap 20000 | 0.758 | 96 s |
+| address char3, df cap 2000 (v1/v2 setting) | 0.412 | 2 s |
+| address char3, df cap 10000 / 40000 | 0.882 / 0.930 | 42 s / 276 s |
+| **address word 1-2 grams**, df cap 5000 | **0.894** | **3 s** |
+| name word 1-2 grams, df cap 5000 | 0.655 | 2 s |
+| name+address char3, cap 10000 / 40000 | 0.965 / 0.988 | 66 s / 446 s |
+| union: address word + name word (5000) | 0.968 | 5 s |
+| name+address word 1-2 grams, cap 5000, top 10 / top 20 | 0.976 / 0.982 | 5 s |
+| **chosen:** name char3 k10 + address word k10 + name+address word k20 | **US 0.9856**, **India 0.9593** (+ embedding search for non-Latin names, which the India number excludes) | ~14 s |
+
+**Decision (exp 8):** replace address char-3-gram search with word 1-2-gram search; add name+address word search (top 20); keep name char3 (top 10, top 30 without address) and the embedding search. New features: `cos_addr_w`, `cos_comb_w` (+ margin, rank), `from_comb`. One US chunk at full density: search 77 s + features 104 s, ~31 candidates per row. Rebuilding FULL train and test with it (~6.5 h chain, `work/run_all.sh`).
+
 ## Lessons (read before changing anything)
 - A relative `max_df` makes search cost grow with S1 size; use an absolute document-frequency cap for **search**, but compute similarity **features** with the full vocabulary.
 - Always time one chunk at test scale (US test S1 = 663k rows) before launching a full run.

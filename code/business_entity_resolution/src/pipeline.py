@@ -34,7 +34,11 @@ ROUNDS1 = 600
 PARAMS2 = dict(PARAMS1, num_leaves=127, learning_rate=0.05)
 ROUNDS2 = 500
 TOPK2 = 2
-SAMPLE_RATE = {"full": 0.06, "s10": 0.4}   # keeps the stage-1 sample near 7-8M rows (16 GB RAM)
+# stage-1 training sample (rows, not whole records: group features are already computed at build time):
+# every matching pair + a share of "hard" non-matches (top-2 by name or address, or look-alike names)
+# + a share of the rest. Keeps ~8M rows for 16 GB RAM. (exp 6: record-level 6% sampling kept only 182k positives)
+NEG_RATE = {"full": (0.15, 0.015), "s10": (1.0, 0.10)}
+STAGE2_RATE = {"full": 0.5, "s10": 1.0}
 SEG_COLS = ["addr_missing", "name_nonlatin", "src"]
 SEG_PASSES = 0   # per-segment threshold search: 0 = off (gave +0.0000 on s10, exp 5) and is slow at full scale
 S2FEATS = ["p1", "p1_rank", "p1_margin", "s_in_cnt", "s_in_sum", "s_in_max_other", "s_in_same_src",
@@ -109,6 +113,14 @@ def attach(p, qmap, rate=None):
     if rate is not None:
         p = p.filter(pl.col("eligible") & ((pl.col("q").hash(seed=1) % 1000) < rate * 1000))
     return p
+
+
+def sample1(p, qmap, hard_rate, rand_rate):
+    p = attach(p, qmap)
+    h = pl.struct("q", "s").hash(seed=3) % 10000
+    hard = (pl.col("cos_name_rank") <= 2) | (pl.col("a_tset_rank") <= 2) | (pl.col("n_tset") >= 80)
+    return p.filter(pl.col("eligible") & (pl.col("label") | (hard & (h < hard_rate * 10000)) |
+                                          (h < rand_rate * 10000)))
 
 
 def X(df, cols):
@@ -222,7 +234,7 @@ def train(tag):
     s1, t, qmap = train_meta(tag)
     qinfo = pl.read_parquet(os.path.join(pairs_dir(tag), "q.parquet")).drop("country")
     files = chunk_files(tag)
-    rate = SAMPLE_RATE.get(tag, 0.1)
+    rate = NEG_RATE.get(tag, (0.15, 0.015))
     s1e = s1.filter("is_eval").select("s")
     te = t.join(s1e, on="s")
     log(f"train {tag}: {len(files)} chunk files, eval S1 {s1e.height}, eval true pairs {te.height}")
@@ -247,7 +259,7 @@ def train(tag):
 
 def stage1(files, qmap, rate, s1e, te, qinfo, md):
     # ---- stage 1: training sample
-    parts = [attach(pl.read_parquet(f), qmap, rate) for f in files]
+    parts = [sample1(pl.read_parquet(f), qmap, *rate) for f in files]
     S = pl.concat(parts)
     del parts
     log(f"stage-1 sample: {S.height} rows, positives {int(S['label'].sum())}")
@@ -301,7 +313,8 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
     p2 = np.zeros(B.height, np.float32)
     models2 = []
     for f in range(N_FOLDS):
-        tr = B.filter((pl.col("fold") != f) & pl.col("eligible"))
+        tr = B.filter((pl.col("fold") != f) & pl.col("eligible") &
+                      ((pl.col("q").hash(seed=5) % 1000) < STAGE2_RATE.get(tag, 1.0) * 1000))
         m = lgb.train(PARAMS2, lgb.Dataset(X(tr, cols2), tr["label"].to_numpy()), ROUNDS2)
         models2.append(m)
         msk = (B["fold"] == f).to_numpy()

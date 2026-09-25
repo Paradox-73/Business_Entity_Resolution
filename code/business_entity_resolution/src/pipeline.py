@@ -31,6 +31,11 @@ from candidates import FEATURES, country_pairs
 # candidate, ranks, candidate counts, chain count). They depend on S1 density and on how many look-alikes exist,
 # both of which differ between train and test; v4 showed the model is very sensitive to them.
 S1_VARIANT = os.environ.get("BER_S1_VARIANT", "")
+# BER_S2_ELIG=latin: stage 2 also trains on records of the embedding fine-tuning half whose name is Latin (the
+# embedding leak the eval-half rule guards against only exists for non-Latin names). BER_S2_RATE overrides the
+# share of records used per fold. Output dir gets the suffix BER_S2_TAG (e.g. models/full_sib_all).
+S2_ELIG = os.environ.get("BER_S2_ELIG", "")
+S2_TAG = os.environ.get("BER_S2_TAG", "")
 DROP1 = {"nomargin": [f for f in FEATURES if f.endswith("_margin") or f.endswith("_rank")]
                      + ["n_cand", "n_name_hi", "n_addr_hi", "s_name_count"]}
 FEATURES1 = [f for f in FEATURES if f not in DROP1.get(S1_VARIANT, [])]
@@ -386,7 +391,7 @@ def train(tag, variant=""):
     else:
         B, models1, found, npairs, g1, gs1, sc1 = stage1(files, qmap, rate, s1e, te, qinfo, md)
         nq = qinfo.height
-    md2 = f"{md}_{variant}" if variant else md
+    md2 = (f"{md}_{variant}" if variant else md) + (f"_{S2_TAG}" if S2_TAG else "")
     os.makedirs(md2, exist_ok=True)
     return train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md2, g1, gs1, sc1, variant, md)
 
@@ -457,9 +462,15 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
         del qattr
     p2 = np.zeros(B.height, np.float32)
     models2 = []
+    elig = pl.col("eligible")
+    if S2_ELIG == "latin":
+        B = B.join(qinfo.select("q", _nl="name_nonlatin"), on="q", how="left")
+        elig = pl.col("eligible") | ~pl.col("_nl").fill_null(True)
+    rate = float(os.environ.get("BER_S2_RATE", STAGE2_RATE.get(tag, 1.0)))
+    log(f"stage-2 training rows: eligibility {S2_ELIG or 'eval half'}, rate {rate}")
     for f in range(N_FOLDS):
-        tr = B.filter((pl.col("fold") != f) & pl.col("eligible") &
-                      ((pl.col("q").hash(seed=5) % 1000) < STAGE2_RATE.get(tag, 1.0) * 1000))
+        tr = B.filter((pl.col("fold") != f) & elig &
+                      ((pl.col("q").hash(seed=5) % 1000) < rate * 1000))
         m = fit(2, X(tr, cols2), tr["label"].to_numpy())
         models2.append(m)
         msk = (B["fold"] == f).to_numpy()

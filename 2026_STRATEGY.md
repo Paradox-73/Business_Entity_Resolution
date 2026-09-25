@@ -135,6 +135,18 @@ TF-IDF cosines (name char-3-gram, address char-3-gram, address words, name+addre
 - Unexplained ~0.008–0.009. **Main suspect: France** (15% of test, no labels). Arithmetic: France at ~0.92 and US/India at ~0.977 give ~0.968.
 - v5 measures it: France score ≈ (LB_v3 − LB_v5) / 0.15 + French singleton share (~0.05).
 
+
+## 6b. Test-side EDA (25 Sep 18:40) — what differs between train and test
+- **Unsure band grows on test in every country**: best-candidate probability 0.05-0.5 = 3.0-3.8% of records in train OOF vs 7.8-8.9% on test (India 7.8, US 8.9, France 8.7). So the gap is not only France.
+- The unsure test records are mostly **same name + same street + house number shifted by a few units** (9692 vs 9687 Diamond Rd; 657 vs 652 39th Ave; 441 vs 432 Inspiration Ln).
+- In train, such pairs (name token-set >= 85, address token-set >= 70, first house number within 3%, not equal, not a prefix) are **92.7% false** (look-alikes); same-number pairs are 97.1% true.
+- Share of records whose best candidate is such a shifted-number look-alike: US **14.3% train vs 21.9% test**, India 2.2% vs 3.2%, France 2.0%.
+- Confident pairs (p1 >= 0.9) look the same in train and test (US name/address token-set 93.9/94.9 vs 93.9/94.5; India 77.6/95.3 both) -> test true matches are **not** noisier.
+- France confident pairs: 91.8 / 91.0 -> France behaves like the other countries.
+- **Density shift**: chain count (S1 rows sharing the core name) of best candidates: US train 22.0 vs test 11.7 (test US S1 is half as dense); India 19.4 vs 17.9. Features tied to density are outside the training range for US.
+
+Implications: (1) the look-alike share is the main measurable difference; (2) US density differs; (3) France does not look worse than the others on any measurable statistic.
+
 ---
 
 ## 7. Known risks and points to cross-check
@@ -857,6 +869,17 @@ Next ideas, ranked by expected gain / cost:
 - Test has 5.5-5.8 S2/S3 rows per S1 vs 4.68 in train; predicted matches per S1 on test (3.37) ~ train truth (3.46) -> test has ~1.9x more unmatched look-alike rows per S1.
 - `decoy_sim.py`: duplicating unmatched OOF rows to the test rate drops v2 OOF 0.9790 -> 0.9773 only; re-tuned rule gains +0.0002. So decoy rate explains ~0.002 of the 0.011 gap.
 - Remaining ~0.009 unexplained: prime suspect France (15% of test, no labels): France F~0.92 with US/India ~0.977 would give 0.968.
+
+#### Test-side EDA (25 Sep 18:40) — what differs between train and test
+- **Unsure band grows on test in every country**: best-candidate probability 0.05-0.5 = 3.0-3.8% of records in train OOF vs 7.8-8.9% on test (India 7.8, US 8.9, France 8.7). So the gap is not only France.
+- The unsure test records are mostly **same name + same street + house number shifted by a few units** (9692 vs 9687 Diamond Rd; 657 vs 652 39th Ave; 441 vs 432 Inspiration Ln).
+- In train, such pairs (name token-set >= 85, address token-set >= 70, first house number within 3%, not equal, not a prefix) are **92.7% false** (look-alikes); same-number pairs are 97.1% true.
+- Share of records whose best candidate is such a shifted-number look-alike: US **14.3% train vs 21.9% test**, India 2.2% vs 3.2%, France 2.0%.
+- Confident pairs (p1 >= 0.9) look the same in train and test (US name/address token-set 93.9/94.9 vs 93.9/94.5; India 77.6/95.3 both) -> test true matches are **not** noisier.
+- France confident pairs: 91.8 / 91.0 -> France behaves like the other countries.
+- **Density shift**: chain count (S1 rows sharing the core name) of best candidates: US train 22.0 vs test 11.7 (test US S1 is half as dense); India 19.4 vs 17.9. Features tied to density are outside the training range for US.
+
+Implications: (1) the look-alike share is the main measurable difference; (2) US density differs; (3) France does not look worse than the others on any measurable statistic.
 
 ### Lessons (read before changing anything)
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.

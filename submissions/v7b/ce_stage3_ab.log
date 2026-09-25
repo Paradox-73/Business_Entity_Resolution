@@ -1,0 +1,40 @@
+[    1.1s] stage 3 on sides ['a', 'b'] (output suffix '_ab')
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.4, "prob": "p2"}: GBDT 0.98024 -> with transformer 0.98644
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.45, "prob": "p2"}: GBDT 0.98068 -> with transformer 0.98693
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.5, "prob": "p2"}: GBDT 0.98097 -> with transformer 0.98740
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.55, "prob": "p2"}: GBDT 0.98114 -> with transformer 0.98769
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.6, "prob": "p2"}: GBDT 0.98114 -> with transformer 0.98785
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.65, "prob": "p2"}: GBDT 0.98094 -> with transformer 0.98794
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.7, "prob": "p2"}: GBDT 0.98065 -> with transformer 0.98798
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.75, "prob": "p2"}: GBDT 0.98007 -> with transformer 0.98792
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.8, "prob": "p2"}: GBDT 0.97918 -> with transformer 0.98782
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.85, "prob": "p2"}: GBDT 0.97779 -> with transformer 0.98759
+[  108.0s] eval S1 (1102482) {"type": "thr", "t": 0.9, "prob": "p2"}: GBDT 0.97526 -> with transformer 0.98714
+[  108.0s] eval S1 (1102482) {"type": "expf", "floor": 0.3, "alpha": 1.0, "prob": "p2"}: GBDT 0.98151 -> with transformer 0.98804
+[  108.0s] eval S1 (1102482) {"type": "expf", "floor": 0.3, "alpha": 1.5, "prob": "p2"}: GBDT 0.98055 -> with transformer 0.98796
+[  108.0s] eval S1 (1102482) {"type": "expf", "floor": 0.3, "alpha": 2.0, "prob": "p2"}: GBDT 0.97955 -> with transformer 0.98779
+[  108.0s] eval S1 (1102482) {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}: GBDT 0.98140 -> with transformer 0.98805
+[  108.0s] eval S1 (1102482) {"type": "expf", "floor": 0.5, "alpha": 1.5, "prob": "p2"}: GBDT 0.98052 -> with transformer 0.98796
+[  108.0s] eval S1 (1102482) {"type": "expf", "floor": 0.5, "alpha": 2.0, "prob": "p2"}: GBDT 0.97953 -> with transformer 0.98779
+[  108.0s] BEST eval: GBDT 0.98151 ({"type": "expf", "floor": 0.3, "alpha": 1.0, "prob": "p2"}) -> with transformer 0.98805 ({"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"})
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.4, "prob": "p2"}: GBDT 0.98030 -> with transformer 0.98649
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.45, "prob": "p2"}: GBDT 0.98074 -> with transformer 0.98698
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.5, "prob": "p2"}: GBDT 0.98106 -> with transformer 0.98742
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.55, "prob": "p2"}: GBDT 0.98122 -> with transformer 0.98770
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.6, "prob": "p2"}: GBDT 0.98122 -> with transformer 0.98787
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.65, "prob": "p2"}: GBDT 0.98105 -> with transformer 0.98797
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.7, "prob": "p2"}: GBDT 0.98073 -> with transformer 0.98801
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.75, "prob": "p2"}: GBDT 0.98018 -> with transformer 0.98797
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.8, "prob": "p2"}: GBDT 0.97932 -> with transformer 0.98786
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.85, "prob": "p2"}: GBDT 0.97793 -> with transformer 0.98763
+[  218.5s] all S1 (2206821) {"type": "thr", "t": 0.9, "prob": "p2"}: GBDT 0.97537 -> with transformer 0.98720
+[  218.5s] all S1 (2206821) {"type": "expf", "floor": 0.3, "alpha": 1.0, "prob": "p2"}: GBDT 0.98157 -> with transformer 0.98807
+[  218.5s] all S1 (2206821) {"type": "expf", "floor": 0.3, "alpha": 1.5, "prob": "p2"}: GBDT 0.98063 -> with transformer 0.98799
+[  218.5s] all S1 (2206821) {"type": "expf", "floor": 0.3, "alpha": 2.0, "prob": "p2"}: GBDT 0.97965 -> with transformer 0.98783
+[  218.5s] all S1 (2206821) {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}: GBDT 0.98149 -> with transformer 0.98808
+[  218.5s] all S1 (2206821) {"type": "expf", "floor": 0.5, "alpha": 1.5, "prob": "p2"}: GBDT 0.98060 -> with transformer 0.98799
+[  218.5s] all S1 (2206821) {"type": "expf", "floor": 0.5, "alpha": 2.0, "prob": "p2"}: GBDT 0.97963 -> with transformer 0.98783
+[  218.5s] BEST all: GBDT 0.98157 ({"type": "expf", "floor": 0.3, "alpha": 1.0, "prob": "p2"}) -> with transformer 0.98808 ({"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"})
+[  223.5s] stage-3 importance: {'p1': 90915, 'p2': 2438476, 'ce': 12039038, 'ce_margin': 312219, 'ce_rank': 584, 'p2_margin': 1049629}
+[  228.6s] test stage-3 agreement between sides: corr 0.9866, decisions differing at 0.5: 44316
+[  230.0s] wrote E:\Projects\Amazon ML Challenge\work\ce\test_scores_ce_ab.parquet (10713750 rows; 2258991 S2/S3 rows re-scored); rule {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"} -> rule_ab.json

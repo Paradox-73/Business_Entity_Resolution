@@ -26,6 +26,7 @@ OUT = os.path.join(WORK, "emb_all")
 FT = os.path.join(OUT, "model")
 MAXLEN = 64
 DEV = "cuda"
+LIMIT = int(os.environ.get("BER_EMB_LIMIT", "0"))   # smoke test: >0 = only this many pairs / rows per file
 
 
 def text(df):
@@ -63,6 +64,7 @@ class Enc:
 
 
 def train(base="intfloat/multilingual-e5-base", max_pairs=2_000_000, bs=256, lr=3e-5):
+    max_pairs = LIMIT or max_pairs
     tr = read_truth().filter(pl.col("s1_id").map_elements(lambda x: zlib.crc32(x.encode()) % 1000 >= 500,
                                                           return_dtype=pl.Boolean))
     q = pl.concat([load("train", k) for k in (2, 3)])
@@ -116,6 +118,8 @@ def encode():
     for split in ("train", "test"):
         for k in (1, 2, 3):
             df = load(split, k)
+            if LIMIT:
+                df = df.head(LIMIT)
             v = enc.encode(text(df))
             np.save(os.path.join(OUT, f"{split}_s{k}.npy"), v)
             df.select(q=id_to_int("entity_id"), country="country").write_parquet(os.path.join(OUT, f"{split}_s{k}_ids.parquet"))

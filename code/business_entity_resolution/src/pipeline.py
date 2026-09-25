@@ -249,6 +249,38 @@ def sibling_features(b, qattr):
     return b
 
 
+CONSFEATS = ["cons_addr_mean", "cons_addr_min", "cons_name_mean", "cons_name_min", "cons_num_share", "cons_num_same"]
+
+
+def consensus_features(b, qattr, parts=8):
+    """Compare each row (q, s) with ALL other S2/S3 rows whose top candidate is the same S1 with p1 >= 0.5
+    (sibling_features uses only the best one): mean/min name and address agreement, and how many of them
+    share q's first house number. A true match agrees with the group; a look-alike (shifted number) does not.
+    Processed in `parts` slices of S1 to bound memory."""
+    from rapidfuzz import fuzz
+    from rapidfuzz.process import cpdist
+    mem = (b.filter((pl.col("p1_rank") == 1) & (pl.col("p1") >= 0.5)).select("s", qm="q")
+            .join(qattr.rename({"q": "qm", "nm": "nm_m", "ad": "ad_m", "n1": "n1_m"}), on="qm", how="left"))
+    key = b.select("q", "s").with_columns(h=(pl.col("s").hash(seed=7) % parts))
+    out = []
+    for i in range(parts):
+        x = (key.filter(pl.col("h") == i).drop("h").join(mem, on="s").filter(pl.col("qm") != pl.col("q"))
+                .join(qattr, on="q", how="left"))
+        fill = lambda c: x[c].fill_null("").to_list()
+        ns = cpdist(fill("nm"), fill("nm_m"), scorer=fuzz.token_set_ratio, workers=-1, dtype=np.float32)
+        ad = cpdist(fill("ad"), fill("ad_m"), scorer=fuzz.token_set_ratio, workers=-1, dtype=np.float32)
+        no_ad = (pl.col("ad").fill_null("") == "") | (pl.col("ad_m").fill_null("") == "")
+        x = x.with_columns(ns=pl.Series(ns), ad=pl.when(no_ad).then(None).otherwise(pl.Series(ad)),
+                           eq=pl.when(pl.col("n1").is_null() | pl.col("n1_m").is_null()).then(None)
+                              .otherwise((pl.col("n1") == pl.col("n1_m")).cast(pl.Float32)))
+        out.append(x.group_by("q", "s").agg(
+            cons_addr_mean=pl.col("ad").mean(), cons_addr_min=pl.col("ad").min(),
+            cons_name_mean=pl.col("ns").mean(), cons_name_min=pl.col("ns").min(),
+            cons_num_share=pl.col("eq").mean(), cons_num_same=pl.col("eq").sum()))
+        del x
+    return b.join(pl.concat(out), on=["q", "s"], how="left")
+
+
 # ---------------------------------------------------------------- decision
 def decide(b, prob, thr, qinfo):
     """Top-1 S1 per q by `prob`, kept if prob >= its segment threshold. Returns DataFrame s, q."""
@@ -404,10 +436,16 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
     # ---- stage 2
     B = stage2_features(B, qinfo)
     cols2 = FEATURES + S2FEATS
-    if variant == "sib":
-        B = sibling_features(B, load_qattr("train"))
+    if variant in ("sib", "cons"):
+        qattr = load_qattr("train")
+        B = sibling_features(B, qattr)
         cols2 = cols2 + SIBFEATS
         log("sibling features added")
+        if variant == "cons":
+            B = consensus_features(B, qattr)
+            cols2 = cols2 + CONSFEATS
+            log("consensus features added")
+        del qattr
     p2 = np.zeros(B.height, np.float32)
     models2 = []
     for f in range(N_FOLDS):
@@ -485,13 +523,20 @@ def predict(model_tag, test_tag):
     del B0
     cols2 = res.get("cols2", FEATURES + S2FEATS)
     if any(c in cols2 for c in SIBFEATS):
-        B = sibling_features(B, load_qattr("test"))
+        # sibling text must be cleaned the same way as the pairs (e.g. 'testfr' = France with French rules)
+        split = test_tag if os.path.exists(os.path.join(WORK, f"{test_tag}_s2.parquet")) else "test"
+        qattr = load_qattr(split)
+        B = sibling_features(B, qattr)
+        if any(c in cols2 for c in CONSFEATS):
+            B = consensus_features(B, qattr)
+        del qattr
     B = B.with_columns(p2=pl.Series(np.mean([score(m, X(B, cols2)) for m in m2], axis=0), dtype=pl.Float32))
     prob = "p2" if res["use_stage2"] else "p1"
     dec = res["decision"] if res["use_stage2"] else {"type": "thr", "t": res["stage1_global"][0]}
     M = apply_decision(B, prob, dec, qinfo)
     log(f"decision {prob} {dec}: {M.height} matches")
-    B.select("q", "s", "p1", "p2").write_parquet(os.path.join(WORK, f"test_scores_{model_tag}.parquet"))
+    sfx = "" if test_tag == "test" else f"_{test_tag}"      # e.g. France-only rebuild must not overwrite full-test scores
+    B.select("q", "s", "p1", "p2").write_parquet(os.path.join(WORK, f"test_scores_{model_tag}{sfx}.parquet"))
     ids = s1.select("s", source1_entity_id="s1_id")
     for df, name, col in ((M.group_by("s").agg(pl.col("q").sort()), "matching_results.tsv", "matched_entity_ids"),
                           (C, "candidate_pairs.tsv", "candidate_entity_ids")):

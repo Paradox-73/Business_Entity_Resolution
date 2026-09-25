@@ -132,6 +132,24 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 - Check 4 (test look-alikes = train businesses?): pending, needs RAM after v4 training.
 - Forum rules (25 Sep): hand-written normalisation dictionaries, unsupervised stats on test, self-training allowed; libpostal/gazetteers/APIs not allowed. Plan in docs/AWS_PLAN.md.
 
+### v5 result and France diagnosis (25 Sep 19:00-19:30)
+- **v5 (v3 with every France S1 row emptied) LB 0.838.** Test S1: France 259,452 of 1,732,544 (15.0%). Train singleton share 5.6% in both countries.
+  France F0.5 = 0.132 / 0.1497 + 0.056 = **~0.937** (0.934-0.941 given LB rounding); US+India = (0.970 - 0.1497 x 0.937) / 0.8503 = **~0.976**.
+  So v3's OOF-LB gap (0.980 vs 0.970) is ~0.006 France + ~0.004 US/India (test density / look-alikes).
+- France is not under- or over-matched: predicted matches per S1 France 3.43, US 3.38, India 3.34 (train truth 3.46); S1 non-empty 94.8% vs 94.3% (train 94.4%).
+- France's best-candidate probability is not more uncertain: 0.05-0.5 band France 8.5%, US 8.8%, India 7.1%. Its loss is confident mistakes.
+- **France S1 twins**: same generic name ("<city> <word> SARL"), same street, differing only in legal form (SA/SAS/SARL/SASU) or house number. Share of records whose 2nd candidate also has p1 > 0.5: France 2.07%, US 0.39%.
+- France S2/S3 noise not handled by the US-trained cleaning (tokens in records but not in their confidently matched S1): dotted legal forms (s.a.s., s.a.r.l., e.u.r.l., s.a.s.u. ~5% of records), "et" for "&", street abbreviations r./av./ave/st./all./bd./blvd/imp./rte./crs/q./pl./ch./psg., "No"/"N°" before the number, departement names (Nord, Gironde, Loire-Atlantique, Pas-de-Calais) where S1 has region names.
+- Decoy name words are already handled: US records with Midtown/Northside/Greater/Eastgate are 0% true in train and the model gives p2 > 0.5 to 0.1%; France records with Participations/Holding/Distribution/International get p2 > 0.5 for 0.9-2.4%.
+- No Paris/Lyon/Marseille in France test (cities: Bordeaux, Nantes, Lille, Tourcoing, Dunkerque, Roubaix, Calais, Saint-Nazaire, Pessac, ...); 5-digit postcodes in 0.4% of S1 addresses.
+- **Check 4 (are test records copies of train S1 businesses?)**: 60k US test records: best train-S1 cosine >= 0.9 while best test-S1 < 0.6 for 0.00%; test S1 with a train S1 at cosine >= 0.9: 0.09%. No overlap -> the "empty records that belong to train businesses" idea is dropped.
+- Only India records have embedding features (non-Latin names); US and France both have none, so this is not France-specific.
+
+### v4 = training on test-like conditions (25 Sep 18:59-19:25)
+`testlike.py`: US S1 kept at test density (50%), India 91.7%; look-alike records topped up to test's records-per-S1 (US 5.76, India 5.10). Same features, GPU XGBoost both stages + sibling features.
+- Held-out on the test-like setup: stage 1 0.9719, stage 2 0.9775, recall ceiling 0.9844; best rule plain threshold 0.55 (expected-F0.5 rule 0.9759 there). Not comparable with v3's 0.9802 (different validation data).
+- France cleaning rules written (`normalize.py` french=True, `prep.py france` -> split `testfr`), not yet used.
+
 ## Lessons (read before changing anything)
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
 - A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.

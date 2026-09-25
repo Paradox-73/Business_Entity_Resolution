@@ -100,7 +100,22 @@ Next ideas, ranked by expected gain / cost:
 
 **Decision (exp 8):** replace address char-3-gram search with word 1-2-gram search; add name+address word search (top 20); keep name char3 (top 10, top 30 without address) and the embedding search. New features: `cos_addr_w`, `cos_comb_w` (+ margin, rank), `from_comb`. One US chunk at full density: search 77 s + features 104 s, ~31 candidates per row. Rebuilding FULL train and test with it (~6.5 h chain, `work/run_all.sh`).
 
+## Submissions plan 25 Sep (each upload tests one thing; saved as submissions/vN + git tag vN)
+| Ver | Changes only | OOF (FULL) | Question the leaderboard answers |
+|---|---|---|---|
+| v2 | two-stage LightGBM, word-level shortlist, expected-F0.5 | 0.97904 | **LB 0.9677** (OOF - 0.011). OOF does not track LB 1:1 |
+| v3 | + sibling-agreement stage-2 features (GPU XGBoost stage 2) | 0.98015 (+0.0011) | **LB 0.9700 (+0.0023)**: gain on test is 2x OOF gain -> decoy/group handling is the lever |
+| v4 | stage 1 as deeper GPU XGBoost (depth 10, 1000 rounds) | running | is the model capacity-limited? |
+| v5 | France-only threshold shift on best model | - | is France over/under-matched? |
+| v6 | average LightGBM + XGBoost scores | - | do two model types add accuracy? |
+
+### LB gap analysis (25 Sep 17:40)
+- Test has 5.5-5.8 S2/S3 rows per S1 vs 4.68 in train; predicted matches per S1 on test (3.37) ~ train truth (3.46) -> test has ~1.9x more unmatched look-alike rows per S1.
+- `decoy_sim.py`: duplicating unmatched OOF rows to the test rate drops v2 OOF 0.9790 -> 0.9773 only; re-tuned rule gains +0.0002. So decoy rate explains ~0.002 of the 0.011 gap.
+- Remaining ~0.009 unexplained: prime suspect France (15% of test, no labels): France F~0.92 with US/India ~0.977 would give 0.968.
+
 ## Lessons (read before changing anything)
+- GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
 - A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.
 - A relative `max_df` makes search cost grow with S1 size; use an absolute document-frequency cap for **search**, but compute similarity **features** with the full vocabulary.
 - Always time one chunk at test scale (US test S1 = 663k rows) before launching a full run.

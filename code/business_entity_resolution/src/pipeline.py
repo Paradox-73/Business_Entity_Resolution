@@ -41,6 +41,8 @@ XGB_PARAMS = {1: dict(tree_method="hist", device="cuda", objective="binary:logis
                       min_child_weight=20, subsample=0.7, colsample_bytree=0.8, reg_lambda=1.0, max_bin=256, seed=7),
               2: dict(tree_method="hist", device="cuda", objective="binary:logistic", eta=0.05, max_depth=8,
                       min_child_weight=20, subsample=0.7, colsample_bytree=0.8, reg_lambda=1.0, max_bin=256, seed=7)}
+XGB_ROUNDS = {1: 1000, 2: 500}   # v4 capacity test: deeper (depth 10) + more rounds than LightGBM stage 1
+XGB_PARAMS[1]["eta"] = 0.06
 EXT = ".json" if BACKEND == "xgb" else ".txt"
 EXT2 = ".json" if BACKEND2 == "xgb" else ".txt"
 
@@ -48,7 +50,7 @@ EXT2 = ".json" if BACKEND2 == "xgb" else ".txt"
 def fit(stage, Xm, y):
     if (BACKEND if stage == 1 else BACKEND2) == "xgb":
         import xgboost as xgb
-        return xgb.train(XGB_PARAMS[stage], xgb.QuantileDMatrix(Xm, y), ROUNDS1 if stage == 1 else ROUNDS2)
+        return xgb.train(XGB_PARAMS[stage], xgb.QuantileDMatrix(Xm, y), XGB_ROUNDS[stage])
     return lgb.train(PARAMS1 if stage == 1 else PARAMS2, lgb.Dataset(Xm, y), ROUNDS1 if stage == 1 else ROUNDS2)
 
 
@@ -358,12 +360,14 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
     for f in range(N_FOLDS):
         tr = S.filter(pl.col("fold") != f)
         models1.append(fit(1, X(tr, FEATURES), tr["label"].to_numpy()))
+        models1[-1].save_model(os.path.join(md, f"s1_f{f}" + EXT))   # save at once (crash safety)
         log(f"stage-1 fold {f} trained on {tr.height}")
     imp = importance(models1, FEATURES)
     log("stage-1 top features:", [(a, int(b)) for a, b in imp[:20]])
     del tr
     # one model on the whole sample, used for TEST (3x cheaper to apply than averaging fold models)
-    fit(1, X(S, FEATURES), S["label"].to_numpy()).save_model(os.path.join(md, "s1_full" + EXT))
+    if BACKEND != "xgb":   # GPU (4 GB) cannot hold the full 11.5M-row sample; XGBoost test uses the fold-model average
+        fit(1, X(S, FEATURES), S["label"].to_numpy()).save_model(os.path.join(md, "s1_full" + EXT))
     log("stage-1 full-sample model saved")
     del S
 
@@ -425,7 +429,8 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
     for i, m in enumerate(models2):
         m.save_model(os.path.join(md, f"s2_f{i}" + EXT2))
     tr = B.filter(pl.col("eligible"))
-    fit(2, X(tr, cols2), tr["label"].to_numpy()).save_model(os.path.join(md, "s2_full" + EXT2))
+    if BACKEND2 != "xgb":
+        fit(2, X(tr, cols2), tr["label"].to_numpy()).save_model(os.path.join(md, "s2_full" + EXT2))
     del tr
     res = {"tag": tag, "recall_ceiling": found / te.height, "pairs_per_q": npairs / nq,
            "stage1_global": [g1, gs1], "stage1_seg": sc1, "stage2_global": [g2, gs2], "stage2_seg": sc2,

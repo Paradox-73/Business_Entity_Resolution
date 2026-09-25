@@ -25,20 +25,32 @@ import polars as pl
 from common import WORK, log, read_truth, id_to_int, macro_f05_df
 
 OUT = os.environ.get("BER_CE_DIR", os.path.join(WORK, "ce"))          # rows/scores for one base model
-FT = os.environ.get("BER_CE_MODEL", os.path.join(WORK, "ce", "model"))  # the trained transformer (shared)
+# Two transformers, cross-fitted on the two S1 halves: side "a" trains on group "train" and scores group "eval";
+# side "b" trains on group "eval" and scores group "train". Stage 3 then learns from both groups, and test
+# uses the average of both sides' stage-3 probabilities.
+SIDE = os.environ.get("BER_CE_SIDE", "a")
+SFX = "" if SIDE == "a" else "_b"
+TRAIN_GRP, SCORE_GRP = ("train", "eval") if SIDE == "a" else ("eval", "train")
+FT = os.environ.get("BER_CE_MODEL", os.path.join(WORK, "ce", "model" + SFX))  # the trained transformer (shared)
+# BER_CE_REUSE=<another BER_CE_DIR>: reuse that folder's scores of the same transformer for pairs already scored
+REUSE = os.environ.get("BER_CE_REUSE", "")
 LO, HI, P1_2ND = 0.01, 0.995, 0.2
 MAXLEN = 128
 LIMIT = int(os.environ.get("BER_CE_LIMIT", "0"))      # smoke test: > 0 = only this many rows per step
 DEV = "cuda"
 
 
-def texts(split):
-    """int id -> 'lowercased name | address' for all S1/S2/S3 rows of a split."""
-    return pl.concat([pl.read_parquet(os.path.join(WORK, f"{split}_s{k}.parquet"), columns=["entity_id", "business_name", "business_address"])
-                      for k in (1, 2, 3)]).select(
-        id=id_to_int("entity_id"),
-        t=(pl.col("business_name").fill_null("").str.to_lowercase() + " | " +
-           pl.col("business_address").fill_null("").str.to_lowercase()).str.slice(0, 160))
+def texts(split, ids):
+    """int id -> 'lowercased name | address' for the S1/S2/S3 rows of a split whose id is in `ids` (column id).
+    One file at a time, keeping only the needed rows, so memory stays low."""
+    out = []
+    for k in (1, 2, 3):
+        out.append(pl.scan_parquet(os.path.join(WORK, f"{split}_s{k}.parquet")).select(
+            "entity_id", "business_name", "business_address").with_columns(id=id_to_int("entity_id"))
+            .join(ids.lazy(), on="id").select(
+            "id", t=(pl.col("business_name").fill_null("").str.to_lowercase() + " | " +
+                     pl.col("business_address").fill_null("").str.to_lowercase()).str.slice(0, 160)).collect())
+    return pl.concat(out)
 
 
 def close_calls(b):
@@ -74,7 +86,8 @@ def select(model_dir):
 
 
 def _pairs(rows, split):
-    tx = texts(split)
+    tx = texts(split, pl.concat([rows.select(id=pl.col("q").cast(pl.Int64)), rows.select(id=pl.col("s").cast(pl.Int64))]).unique())
+    rows = rows.with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     r = (rows.join(tx.rename({"id": "q", "t": "tq"}), on="q", how="left")
              .join(tx.rename({"id": "s", "t": "ts"}), on="s", how="left"))
     return r.with_columns(pl.col("tq").fill_null(""), pl.col("ts").fill_null(""))
@@ -83,12 +96,12 @@ def _pairs(rows, split):
 def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
-    rows = pl.read_parquet(os.path.join(OUT, "train_rows.parquet")).filter(pl.col("grp") == "train")
+    rows = pl.read_parquet(os.path.join(OUT, "train_rows.parquet")).filter(pl.col("grp") == TRAIN_GRP)
     rows = rows.sample(fraction=1.0, shuffle=True, seed=0)
     if LIMIT:
         rows = rows.head(LIMIT)
     r = _pairs(rows, "train")
-    log(f"transformer training rows {r.height}, positives {r['label'].sum()}")
+    log(f"transformer side {SIDE}: training rows {r.height} (group {TRAIN_GRP}), positives {r['label'].sum()} -> {FT}")
     tok = AutoTokenizer.from_pretrained(base)
     m = AutoModelForSequenceClassification.from_pretrained(base, num_labels=1).to(DEV)
     small = torch.cuda.get_device_properties(0).total_memory < 8e9
@@ -102,7 +115,16 @@ def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
     sch = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=steps, pct_start=0.06)
     scaler = torch.amp.GradScaler(enabled=not bf16)
     tq, ts, y = r["tq"].to_list(), r["ts"].to_list(), r["label"].cast(pl.Float32).to_numpy()
-    ck = os.path.join(OUT, "ckpt.pt")                 # resume after a crash (the 4 GB GPU is shared)
+    # batches of similar text length (less padding, faster): within blocks of 64 batches of the shuffled rows,
+    # sort by length, cut into batches, shuffle the batch order; fixed seed, so a resumed run sees the same order
+    lens = np.array([len(a) + len(b) for a, b in zip(tq, ts)])
+    order, rng, blk = [], np.random.default_rng(1), bs * 64
+    for a in range(0, len(lens), blk):
+        idx = a + np.argsort(lens[a:a + blk], kind="stable")
+        bat = [idx[i:i + bs] for i in range(0, len(idx), bs)]
+        order += [bat[j] for j in rng.permutation(len(bat))]
+    order = np.concatenate(order)
+    ck = FT.rstrip("/\\") + "_ckpt.pt"               # resume after a crash (the 4 GB GPU is shared)
     start = 0
     if os.path.exists(ck):
         st = torch.load(ck, map_location="cpu", weights_only=False)   # CPU first: loading onto the GPU doubles memory
@@ -112,11 +134,12 @@ def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
         del st
     m.train()
     for i in range(start, steps):
-        a, b = i * bs, (i + 1) * bs
-        enc = tok(tq[a:b], ts[a:b], padding=True, truncation=True, max_length=MAXLEN, return_tensors="pt").to(DEV)
+        ix = order[i * bs:(i + 1) * bs]
+        enc = tok([tq[j] for j in ix], [ts[j] for j in ix], padding=True, truncation=True, max_length=MAXLEN,
+                  return_tensors="pt").to(DEV)
         with torch.autocast("cuda", dtype=torch.bfloat16 if bf16 else torch.float16):
             logit = m(**enc).logits.squeeze(-1)
-        loss = torch.nn.functional.binary_cross_entropy_with_logits(logit.float(), torch.tensor(y[a:b], device=DEV))
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(logit.float(), torch.tensor(y[ix], device=DEV))
         opt.zero_grad()
         scaler.scale(loss).backward()
         scaler.unscale_(opt)
@@ -135,33 +158,77 @@ def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
     tok.save_pretrained(FT)
 
 
-def _score(r, bs=256):
-    import torch
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(FT)
-    m = AutoModelForSequenceClassification.from_pretrained(FT).to(DEV).eval()
-    bf16 = torch.cuda.is_bf16_supported()
-    tq, ts = r["tq"].to_list(), r["ts"].to_list()
-    out = np.empty(len(tq), np.float32)
-    with torch.no_grad():
-        for a in range(0, len(tq), bs):
-            enc = tok(tq[a:a + bs], ts[a:a + bs], padding=True, truncation=True, max_length=MAXLEN, return_tensors="pt").to(DEV)
-            with torch.autocast("cuda", dtype=torch.bfloat16 if bf16 else torch.float16):
-                out[a:a + bs] = m(**enc).logits.squeeze(-1).float().cpu().numpy()
-            if a % (bs * 400) == 0:
-                log(f"  scored {a}/{len(tq)}")
-    return out
+class Scorer:
+    """The trained transformer; call with lists of texts, returns logits. Batches are formed from texts of
+    similar length (less padding), results come back in the input order."""
+    def __init__(self, bs=256):
+        import torch
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+        self.torch, self.bs = torch, bs
+        self.tok = AutoTokenizer.from_pretrained(FT)
+        self.m = AutoModelForSequenceClassification.from_pretrained(FT).to(DEV).eval()
+        self.dt = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+
+    def __call__(self, tq, ts):
+        torch, bs = self.torch, self.bs
+        order = np.argsort(np.array([len(a) + len(b) for a, b in zip(tq, ts)]), kind="stable")
+        out = np.empty(len(tq), np.float32)
+        with torch.no_grad():
+            for a in range(0, len(tq), bs):
+                ix = order[a:a + bs]
+                enc = self.tok([tq[j] for j in ix], [ts[j] for j in ix], padding=True, truncation=True,
+                               max_length=MAXLEN, return_tensors="pt").to(DEV)
+                with torch.autocast("cuda", dtype=self.dt):
+                    out[ix] = self.m(**enc).logits.squeeze(-1).float().cpu().numpy()
+        return out
 
 
-def score():
-    for split, flt in (("train", pl.col("grp") == "eval"), ("test", pl.lit(True))):
-        rows = pl.read_parquet(os.path.join(OUT, f"{split}_rows.parquet")).filter(flt)
+def score(chunk=200_000):
+    """Scores this side's close calls (train group SCORE_GRP, and all test close calls) in saved chunks, so a
+    crash (out of memory) resumes at the last finished chunk. Pairs already scored by the same transformer in
+    BER_CE_REUSE's folder are copied instead of scored."""
+    sc = None
+    for split, flt in (("train", pl.col("grp") == SCORE_GRP), ("test", pl.lit(True))):
+        dst = os.path.join(OUT, f"{split}_ce{SFX}{'_smoke' if LIMIT else ''}.parquet")   # smoke test never overwrites
+        if os.path.exists(dst) and not LIMIT:
+            log(f"{dst} exists, kept")
+            continue
+        rows = pl.read_parquet(os.path.join(OUT, f"{split}_rows.parquet")).filter(flt).with_columns(
+            pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
         if LIMIT:
             rows = rows.head(LIMIT)
-        r = _pairs(rows, split)
-        r = r.with_columns(ce=pl.Series(_score(r))).drop("tq", "ts")
-        r.write_parquet(os.path.join(OUT, f"{split}_ce.parquet"))
-        log(f"{split}: {r.height} close-call rows scored")
+        known = []
+        src = os.path.join(REUSE, f"{split}_ce{SFX}.parquet") if REUSE else ""
+        if src and os.path.exists(src):
+            known = [pl.read_parquet(src, columns=["q", "s", "ce"]).with_columns(
+                pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64)).join(rows.select("q", "s"), on=["q", "s"])]
+            log(f"{split}: {known[0].height} of {rows.height} pairs reused from {src}")
+        todo = rows.select("q", "s").unique().sort("q", "s")
+        if known:
+            todo = todo.join(known[0].select("q", "s"), on=["q", "s"], how="anti")
+        pdir = os.path.join(OUT, f"parts_{split}{SFX}{'_smoke' if LIMIT else ''}")
+        meta = {"n": todo.height, "chunk": chunk, "model": FT}
+        mf = os.path.join(pdir, "meta.json")
+        if os.path.exists(mf) and json.load(open(mf)) != meta:      # parts of another run: start over
+            import shutil
+            shutil.rmtree(pdir)
+        os.makedirs(pdir, exist_ok=True)
+        json.dump(meta, open(mf, "w"))
+        done = []
+        for i, a in enumerate(range(0, todo.height, chunk)):
+            pf = os.path.join(pdir, f"{i:04d}.parquet")
+            if not os.path.exists(pf):
+                c = _pairs(todo.slice(a, chunk), split)
+                sc = sc or Scorer()
+                c.select("q", "s").with_columns(ce=pl.Series(sc(c["tq"].to_list(), c["ts"].to_list()))).write_parquet(pf + ".tmp")
+                os.replace(pf + ".tmp", pf)
+                log(f"  {split}: scored {min(a + chunk, todo.height)}/{todo.height}")
+            done.append(pl.read_parquet(pf))
+        ce = pl.concat(known + done) if known or done else pl.DataFrame({"q": [], "s": [], "ce": []})
+        r = rows.join(ce, on=["q", "s"], how="left")
+        assert r["ce"].null_count() == 0, "pairs without a transformer score"
+        r.write_parquet(dst)
+        log(f"{split}: {r.height} close-call rows -> {dst}")
 
 
 S3FEATS = ["p1", "p2", "ce", "ce_margin", "ce_rank", "p2_margin", "n_cc"]
@@ -177,12 +244,38 @@ def _s3_features(r):
     return r
 
 
+def _decisions(b, prob, truth, s1s):
+    """Macro F0.5 of the threshold rules and expected-F0.5 set rules on probability column `prob`."""
+    from pipeline import decide_expf
+    top = b.sort(prob, descending=True).unique("q", keep="first")
+    out = {}
+    for th in (0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9):
+        out[json.dumps({"type": "thr", "t": th, "prob": "p2"})] = macro_f05_df(
+            top.filter(pl.col(prob) >= th).select("s", "q"), truth, s1s)
+    for floor in (0.3, 0.5):
+        for alpha in (1.0, 1.5, 2.0):
+            out[json.dumps({"type": "expf", "floor": floor, "alpha": alpha, "prob": "p2"})] = macro_f05_df(
+                decide_expf(b, prob, floor, alpha), truth, s1s)
+    return out
+
+
 def stage3():
+    """Stage 3 on the transformer scores of every side present (a: eval group, b: train group), 3 folds.
+    Held-out macro F0.5 on the eval-half S1 rows (comparable with earlier runs) and on all S1 rows, for each
+    decision rule; the best rule on the eval half is saved as rule<sfx>.json (finalize.py format). Test: each
+    side's scores go through the stage-3 model and the stage-3 probabilities are averaged."""
     import xgboost as xgb
     params = dict(tree_method="hist", device="cuda", objective="binary:logistic", eta=0.05, max_depth=6,
                   min_child_weight=20, subsample=0.8, colsample_bytree=0.9, seed=7)
     md = json.load(open(os.path.join(OUT, "select.json")))["model_dir"]
-    r = _s3_features(pl.read_parquet(os.path.join(OUT, "train_ce.parquet")))
+    sides = [x for x in os.environ.get("BER_S3_SIDES", "a,b").split(",")
+             if os.path.exists(os.path.join(OUT, f"train_ce{'' if x == 'a' else '_' + x}.parquet"))
+             and os.path.exists(os.path.join(OUT, f"test_ce{'' if x == 'a' else '_' + x}.parquet"))]
+    tagx = "_" + "".join(sides)          # e.g. _a, _ab; never overwrites the files v7 was built from
+    log(f"stage 3 on sides {sides} (output suffix '{tagx}')")
+    r = _s3_features(pl.concat([pl.read_parquet(os.path.join(OUT, f"train_ce{'' if x == 'a' else '_' + x}.parquet"))
+                                .with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64)) for x in sides]))
+    assert r.select(pl.struct("q", "s").is_duplicated().sum()).item() == 0
     s1 = pl.read_parquet(os.path.join(WORK, "train_s1.parquet"), columns=["entity_id"]).select(
         s=id_to_int("entity_id"), h=half("entity_id"))
     p3 = np.zeros(r.height, np.float32)
@@ -192,36 +285,57 @@ def stage3():
         msk = (r["fold"] == f).to_numpy()
         p3[msk] = mdl.predict(xgb.DMatrix(r.filter(pl.Series(msk)).select(S3FEATS).to_numpy()))
     r = r.with_columns(p3=pl.Series(p3))
-    # eval: replace p2 by p3 on close-call rows of eval-half S1, compare decisions on eval S1
-    oof = pl.read_parquet(os.path.join(WORK, "models", md, "oof.parquet"))
-    new = oof.join(r.select("q", "s", "p3"), on=["q", "s"], how="left").with_columns(
-        p2n=pl.coalesce("p3", "p2"))
-    # eval S1 = eval half of the S1 rows that exist in this model's training setup (e.g. test-like keeps 50% of US)
+    # held-out: p2 replaced by p3 on the close-call rows that have an out-of-sample transformer score
+    oof = pl.read_parquet(os.path.join(WORK, "models", md, "oof.parquet"), columns=["q", "s", "p2"]).with_columns(
+        pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+    touched = r.select("q").unique().with_columns(t=pl.lit(True))
+    new = (oof.join(r.select("q", "s", "p3"), on=["q", "s"], how="left").join(touched, on="q", how="left")
+              .with_columns(p2n=pl.when(pl.col("t").is_null()).then(pl.col("p2")).otherwise(pl.col("p3").fill_null(0.0))))
+    # S1 rows that exist in this model's training setup; eval half = crc32 half < 500
     tag = json.load(open(os.path.join(WORK, "models", md, "result.json")))["tag"]
-    ev = (s1.filter(pl.col("h") < 500).select("s")
-            .join(pl.read_parquet(os.path.join(WORK, "pairs", tag, "s1.parquet"), columns=["s"]), on="s"))
-    truth = read_truth().select(s=id_to_int("s1_id"), q=id_to_int("q_id")).join(ev, on="s")
-    touched = r.select("q").unique()
-    new = new.join(touched.with_columns(t=pl.lit(True)), on="q", how="left").with_columns(
-        p2n=pl.when(pl.col("t").is_null()).then(pl.col("p2")).otherwise(pl.col("p2n").fill_null(0.0)))
-    for th in (0.45, 0.5, 0.55, 0.6, 0.65):
-        a = new.sort("p2", descending=True).unique("q", keep="first").filter(pl.col("p2") >= th).select("s", "q")
-        b = new.sort("p2n", descending=True).unique("q", keep="first").filter(pl.col("p2n") >= th).select("s", "q")
-        log(f"thr {th}: eval S1 macro F0.5 GBDT {macro_f05_df(a, truth, ev):.5f} -> with transformer {macro_f05_df(b, truth, ev):.5f}")
+    allS = s1.join(pl.read_parquet(os.path.join(WORK, "pairs", tag, "s1.parquet"), columns=["s"]).with_columns(
+        pl.col("s").cast(pl.Int64)), on="s")
+    truth_all = read_truth().select(s=id_to_int("s1_id"), q=id_to_int("q_id"))
+    res = {}
+    for name, ss in (("eval", allS.filter(pl.col("h") < 500).select("s")), ("all", allS.select("s"))):
+        tr_ = truth_all.join(ss, on="s")
+        g, n_ = _decisions(new, "p2", tr_, ss), _decisions(new, "p2n", tr_, ss)
+        res[name] = (g, n_)
+        for k in n_:
+            log(f"{name} S1 ({ss.height}) {k}: GBDT {g[k]:.5f} -> with transformer {n_[k]:.5f}")
+        kg, kn = max(g, key=g.get), max(n_, key=n_.get)
+        log(f"BEST {name}: GBDT {g[kg]:.5f} ({kg}) -> with transformer {n_[kn]:.5f} ({kn})")
+    g, n_ = res["eval"]
+    kg, kn = max(g, key=g.get), max(n_, key=n_.get)
+    json.dump({"note": f"stage 3 sides {sides}, base {md}; best rule on eval-half S1 (rerank.py stage3)",
+               "x": [], "y": [], "decision": {"default": json.loads(kn)}, "base": g[kg], "best": n_[kn],
+               "all_S1": {"base": max(res["all"][0].values()), "best_rule_score": res["all"][1][kn]}},
+              open(os.path.join(OUT, f"rule{tagx}.json"), "w"), indent=1)
     mdl = xgb.train(params, xgb.DMatrix(r.select(S3FEATS).to_numpy(), r["label"].to_numpy()), 300)
-    mdl.save_model(os.path.join(OUT, "stage3.json"))
+    mdl.save_model(os.path.join(OUT, f"stage3{tagx}.json"))
     imp = mdl.get_score(importance_type="total_gain")
     log("stage-3 importance:", {S3FEATS[int(k[1:])]: round(v) for k, v in imp.items()})
-    # test: p2 replaced by p3 for close-call rows (both candidates), other rows unchanged
-    t = _s3_features(pl.read_parquet(os.path.join(OUT, "test_ce.parquet")))
-    t = t.with_columns(p3=pl.Series(mdl.predict(xgb.DMatrix(t.select(S3FEATS).to_numpy())), dtype=pl.Float32))
-    te = pl.read_parquet(os.path.join(WORK, f"test_scores_{md}.parquet"))
+    # test: p2 replaced by the mean stage-3 probability over sides for close-call rows, other rows unchanged
+    t = None
+    for x in sides:
+        tx = _s3_features(pl.read_parquet(os.path.join(OUT, f"test_ce{'' if x == 'a' else '_' + x}.parquet")).with_columns(
+            pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64)))
+        tx = tx.select("q", "s", **{f"p3_{x}": pl.Series(mdl.predict(xgb.DMatrix(tx.select(S3FEATS).to_numpy())), dtype=pl.Float32)})
+        t = tx if t is None else t.join(tx, on=["q", "s"], how="full", coalesce=True)
+    t = t.with_columns(p3=pl.mean_horizontal([f"p3_{x}" for x in sides]))
+    if len(sides) > 1:
+        log("test stage-3 agreement between sides: corr "
+            f"{np.corrcoef(t[f'p3_{sides[0]}'].to_numpy(), t[f'p3_{sides[1]}'].to_numpy())[0, 1]:.4f}, "
+            f"decisions differing at 0.5: {t.filter((pl.col(f'p3_{sides[0]}') >= 0.5) != (pl.col(f'p3_{sides[1]}') >= 0.5)).height}")
+    te = pl.read_parquet(os.path.join(WORK, f"test_scores_{md}.parquet")).with_columns(
+        pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     tt = t.select("q").unique().with_columns(tch=pl.lit(True))
     te = (te.join(t.select("q", "s", "p3"), on=["q", "s"], how="left").join(tt, on="q", how="left")
             .with_columns(p2=pl.when(pl.col("tch").is_null()).then(pl.col("p2"))
-                          .otherwise(pl.col("p3").fill_null(0.0))).select("q", "s", "p1", "p2"))
-    te.write_parquet(os.path.join(OUT, "test_scores_ce.parquet"))
-    log(f"wrote {OUT}/test_scores_ce.parquet ({te.height} rows; {tt.height} S2/S3 rows re-scored)")
+                          .otherwise(pl.col("p3").fill_null(0.0)).cast(pl.Float32)).select("q", "s", "p1", "p2"))
+    dst = os.path.join(OUT, f"test_scores_ce{tagx}.parquet")
+    te.write_parquet(dst)
+    log(f"wrote {dst} ({te.height} rows; {tt.height} S2/S3 rows re-scored); rule {kn} -> rule{tagx}.json")
 
 
 if __name__ == "__main__":

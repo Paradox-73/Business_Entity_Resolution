@@ -157,6 +157,8 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 | p2 calibration check | p2 0.3-0.4 true 47.8%, 0.4-0.5 57.9%, 0.5-0.6 68.2%, 0.6-0.7 77.3%, 0.8-0.9 92.2% | p2 is under-confident, as in v3 |
 | Consensus stage-2 features (agreement with ALL rows pointing at the same S1 with p1 >= 0.5: mean/min name and address token-set, share/count with the same house number) | stage 2 at t=0.55: 0.9775 -> 0.9791; with expected-F0.5 rule 0.97926 (+0.0017) | keep |
 | France cleaning (French rules, testfr rebuild), v4 model | no labels; 3.1% of France matched pairs change (18,050 records lose a match, 27,283 gain one, 816 move); best p2 > 0.9: 59.0% -> 60.1% | LB only |
+| Self-training on test (1.03M pseudo-labelled test rows incl. 519k France, weight 0.5; validation adds each fold's own pseudo-labels) | 0.97921 vs 0.97926 without | **not used** (no gain on held-out; its test effect cannot be measured) |
+| Calibration refit on the consensus model | 0.97915 (thr 0.55) -> 0.97966 (US 0.9809, India 0.9786) | **v6** = consensus model + calibrated per-country rule + France from the cleaned rebuild; 1,637,900 S1 rows with matches (US 2.33M, India 2.76M, France 0.91M matched records) |
 
 Smoke tests for AWS (laptop GPU, tiny subsets): `embed_all.py` train/encode/search/eval and `rerank.py` select/train/score/stage3 run end to end.
 Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (3.43M pairs).

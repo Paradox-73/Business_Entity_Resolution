@@ -205,6 +205,19 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 | Transformer reranker (multilingual-e5-small cross-encoder, word table frozen, 827k close-call rows of the non-eval half, 1 epoch) + stage-3 XGBoost on v6 (full_cons) p2 | GBDT 0.98094-0.98114 -> **0.98794** at threshold 0.65 (+0.0068); stage-3 gain: transformer score 6.0M vs p2 1.2M | **v7** = this + France legal-form veto (1,633,377 S1 rows with matches) |
 | Stage 2 trained on all Latin-name labels (both halves), rate 1.0, sibling features | 0.98089 vs v3 0.98015 (+0.0007) | candidate for combining with the reranker |
 
+### Test-like split tl2 (train S1 thinned to test's count BEFORE the search; US/India only; out-of-fold; 26 Sep 03:40)
+| Model | tl2 macro F0.5 (all / India / US) | FULL held-out | LB |
+|---|---|---|---|
+| v2 (`full`) | 0.97540 / 0.97506 / 0.97581 | 0.9790 | 0.9677 |
+| v3 (`full_sib`) | 0.97651 / 0.97681 / 0.97615 | 0.98015 | 0.9700 |
+| v6 model (`full_cons`) | **0.97798** / 0.97858 / 0.97725 | 0.98151 | 0.9673 (with France cleaning) |
+- tl2 sits ~0.004 below FULL, close to the US/India LB level (~0.976 from the v5 probe), and ranks v2 < v3 like the LB.
+- v6's model is +0.0015 over v3's on tl2, so v6's LB drop most likely came from its France cleaning, not the consensus features. v7 keeps v6's model for US/India and the old (v3) France cleaning.
+
+### Remaining held-out misses of full_cons (eval S1, GBDT expF rule; 26 Sep 03:20)
+- Missed true pairs 169,650 of 3,815,794: in the reranker's close calls 86,694; never in stage-1 top 2 81,531 (reranker cannot see them); outside the close-call band only 1,425. Wrong predicted pairs 12,473: close calls 11,918, "certain" (p2 > 0.995) 555.
+- Widening the close-call band would gain almost nothing. The next unreachable block needs stage 1 to keep more than 2 candidates per record.
+
 ## Lessons (read before changing anything)
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.

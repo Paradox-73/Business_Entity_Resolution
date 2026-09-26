@@ -384,7 +384,8 @@ def stage3():
         log("test stage-3 agreement between sides: corr "
             f"{np.corrcoef(t[f'p3_{sides[0]}'].to_numpy(), t[f'p3_{sides[1]}'].to_numpy())[0, 1]:.4f}, "
             f"decisions differing at 0.5: {t.filter((pl.col(f'p3_{sides[0]}') >= 0.5) != (pl.col(f'p3_{sides[1]}') >= 0.5)).height}")
-    te = pl.read_parquet(os.path.join(WORK, f"test_scores_{md}.parquet")).with_columns(
+    # BER_S3_TEST: test scores of another candidate build (e.g. blocking_b2.py); default: the model's own test scores
+    te = pl.read_parquet(os.environ.get("BER_S3_TEST", os.path.join(WORK, f"test_scores_{md}.parquet"))).with_columns(
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     if EXTRA:
         xr = pl.read_parquet(os.path.join(OUT, "test_rows.parquet"), columns=["q", "s", "p1"]).with_columns(

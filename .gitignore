@@ -1,5 +1,6 @@
 # data and large artefacts (never commit competition data or outputs)
 student_resource/dataset/
+student_resource/
 2026_official/*.zip
 2026_official/*.mp4
 work/

@@ -235,6 +235,18 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 
 France label-free audit (v7b vs v7b_frbase, 26 Sep 05:20): the transformer changes 42,924 of 259,452 France S1 rows (16.5%; US 0%, by construction). Records it removes: house number differs from S1 20%, name word differs 73% (the known France look-alike pattern). Records it adds: house number differs 34%. Records both keep: 1.6%. So its France removals look right and its additions mostly wrong -> v7c keeps only the removals. The same profile on US/India is not informative (true US/India pairs change house number 16% of the time).
 
+### Remaining held-out loss AFTER the transformer (v7b's p, eval S1, `error2.py full_cons_ce full`; 26 Sep 06:00)
+| Mistake | Points | Count |
+|---|---|---|
+| true record never in stage-1 top 2 | 0.00681 | 81,531 (no address 50,893 = 0.00416) |
+| right S1 found, rejected by the rule | 0.00258 | 31,933 |
+| wrong S1 chosen | 0.00113 | 13,842 |
+| record with no true S1 merged | 0.00083 | 2,999 |
+| record of another S1 merged | 0.00060 | 2,285 |
+- The transformer removed most "wrong S1" and look-alike loss; "never in top 2" is now 57% of what is left.
+- Stage-1 ranks 3-5 of the reranker's records (`topk5.py`, p1 >= 0.005): train 441,400 candidates of 175,565 records with 13,569 true pairs; test 942,458 candidates of 384,621 records. Queued as v7d (stage 3 with these, `BER_S3_EXTRA=1`).
+- e5-base transformer (A2) fits the 4 GB GPU with a 16-bit frozen word table and batch 16 (4.6-6.5 steps/s); queued as v7ens.
+
 ### Remaining held-out misses of full_cons (eval S1, GBDT expF rule; 26 Sep 03:20)
 - Missed true pairs 169,650 of 3,815,794: in the reranker's close calls 86,694; never in stage-1 top 2 81,531 (reranker cannot see them); outside the close-call band only 1,425. Wrong predicted pairs 12,473: close calls 11,918, "certain" (p2 > 0.995) 555.
 - Widening the close-call band would gain almost nothing. The next unreachable block needs stage 1 to keep more than 2 candidates per record.

@@ -1,0 +1,15 @@
+{
+ "note": "blend [['full_cons', 'ce_x', '_smallfolds'], ['full_cons', 'ce_x', '_basefolds']] weights [0.7, 0.30000000000000004] (blend.py)",
+ "x": [],
+ "y": [],
+ "decision": {
+  "default": {
+   "type": "expf",
+   "floor": 0.5,
+   "alpha": 1.0,
+   "prob": "p2"
+  }
+ },
+ "base": 0.9890327900103281,
+ "best": 0.9891137072983534
+}

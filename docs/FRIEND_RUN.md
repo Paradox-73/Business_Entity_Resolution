@@ -22,7 +22,7 @@ pip install "transformers>=4.44" polars pyarrow numpy sentencepiece protobuf
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"   # must print True and the RTX 4060
 ```
 
-Get `bundle_ce_x.zip` from Kavya (329 MB) and unzip it **in the repo root** (it creates `work/…`):
+Kavya sends `bundle_ce_x.zip` (329 MB) separately — it is data, so it is never in git. Unzip it **in the repo root** (it creates `work/…`):
 
 ```bash
 # Windows PowerShell:  Expand-Archive bundle_ce_x.zip -DestinationPath .
@@ -81,10 +81,10 @@ Send back the same 6 files with `large` instead of `base`.
 cd code/business_entity_resolution/src
 # stage 3 on the 3 fold models (prints held-out; "halves protocol" is comparable with v7ens 0.98813)
 BER_CE_DIR=../../../work/ce_x BER_S3_EXTRA=1 BER_S3_SIDES=basef0,basef1,basef2 BER_S3_TAG=_basefolds python rerank.py stage3
-# blend with the laptop's e5-small folds, France rule, submission file
+# blend with the laptop's e5-small folds (v7f), France rule, submission file v7g
 python blend.py final full_cons:ce_x:_basefolds full_cons:ce_x:_smallfolds
 python fr_minrule.py ../../../work/test_scores_blend_final.parquet ../../../work/test_scores_full_cons.parquet ../../../work/ce/test_scores_blend_final_frmin.parquet
-BER_CALIB=../../../work/ce/rule_blend_final.json BER_FR_LEGAL_VETO=1 python finalize.py full_cons ../../../work/out_v8 ../../../work/ce/test_scores_blend_final_frmin.parquet
-python check_submission.py ../../../work/out_v8/matching_results.tsv
+BER_CALIB=../../../work/ce/rule_blend_final.json BER_FR_LEGAL_VETO=1 python finalize.py full_cons ../../../work/out_v7g ../../../work/ce/test_scores_blend_final_frmin.parquet
+python check_submission.py ../../../work/out_v7g/matching_results.tsv
 ```
 A version is uploaded only if its held-out (halves protocol) beats v7ens's 0.98813.

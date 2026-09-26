@@ -343,6 +343,7 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 | v7g2 | mean logits of small+base (`avg_family.py small base sb`), one stage 3 | 0.98844 | 0.98911 |
 
 - Each file comes in two France variants: `out_<v>` (v7ens France: transformer may only lower) and `out_<v>_num` (+ house-number veto, v7k rule): v7g France 852,055 -> 844,350 matched.
+- **v7g_num LB 0.983103** (-0.000056 vs v7ens 0.983159). The file changed France on 16,774 of 259,452 France S1 rows (12,477 by the new transformers' France lowering alone: min(stage 3, GBDT p2) with a different stage 3 removes 10,789 and adds 2,101 France matches vs v7ens; the rest by the number veto) and US/India on 14,235 rows (0.96%). Mistake: 'v7ens France setting' meant the same rule, not the same France rows; two unvalidated France changes were uploaded together with the US/India change, so the loss cannot be attributed. Split: v7l = v7g US/India + v7ens France rows exactly (`splice_country.py`); v7l_k = v7g US/India + v7k France rows.
 - **Uploaded 26 Sep ~23:30: v7g_num** (last upload of the day). LB - 0.983159 = 0.85 x US/India change (held-out +0.00032) + 0.15 x France change (new transformer's France lowering + number veto). Clean France split: upload `out_v7g` (same file without the veto).
 - Friend 1's e5-base (800k rows) ranks below e5-small (all rows) on every fold: capping rows costs more than the bigger model gains. Friend 2 (A6000) trains bge-reranker-v2-m3 on all 1.68M rows, ~2.1 steps/s while another job (`xenc.py`) shared the card, 4.3 steps/s alone.
 

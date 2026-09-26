@@ -126,6 +126,9 @@ class CountryIndex:
         self.Bn = self.vn.fit_transform(_pad(self.s1["name_ns"]))
         self.Ba = self.va.fit_transform(self.s1["addr"].to_list())
         self.Bc = self.vc.fit_transform(_comb(self.s1))
+        # combined SEARCH (which S1 rows become candidates); the cos_comb_w feature always uses vc/Bc.
+        # A subclass may widen it (blocking_b2.py: max_df 20000, top 40).
+        self.vcs, self.Bcs, self.kc = self.vc, self.Bc, K_COMB
         self.fn, self.fa = _vec(1.0), _vec(1.0)
         self.Fn = self.fn.fit_transform(_pad(self.s1["name_ns"]))
         self.Fa = self.fa.fit_transform(_pad(self.s1["addr"]))
@@ -184,7 +187,7 @@ class CountryIndex:
         Ac = self.vc.transform(_comb(q))
         r1, c1 = _topn(An, self.Bn, K_NAME)
         r2, c2 = _topn(Aa, self.Ba, K_ADDR)
-        r3, c3 = _topn(Ac, self.Bc, K_COMB)
+        r3, c3 = _topn(Ac if self.vcs is self.vc else self.vcs.transform(_comb(q)), self.Bcs, self.kc)
         noaddr = np.flatnonzero(q["addr_missing"].to_numpy())
         if len(noaddr):
             rr, cc = _topn(An[noaddr], self.Bn, K_NAME_NOADDR)

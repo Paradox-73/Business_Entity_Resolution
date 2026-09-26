@@ -34,6 +34,9 @@ def main():
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--gc", action="store_true", help="gradient checkpointing (less GPU memory, ~30%% slower)")
     ap.add_argument("--half-emb", action="store_true", help="frozen word table in 16 bit (saves 0.4-0.5 GB)")
+    ap.add_argument("--no-freeze", action="store_true", help="train the word table too (big GPUs, e.g. 48 GB)")
+    ap.add_argument("--lr", default="", help="peak learning rate (default 3e-5; 1e-5 to 2e-5 for large models)")
+    ap.add_argument("--score-batch", default="", help="pairs per scoring batch (default 256; 1024 on a 48 GB GPU)")
     a = ap.parse_args()
     logf = os.path.join(WORK, f"ce_folds_{a.name}{'_smoke' if a.smoke else ''}.log")
 
@@ -61,6 +64,12 @@ def main():
             env["BER_CE_GC"] = "1"
         if a.half_emb:
             env["BER_CE_HALF_EMB"] = "1"
+        if a.no_freeze:
+            env["BER_CE_FREEZE"] = "0"
+        if a.lr:
+            env["BER_CE_LR"] = a.lr
+        if a.score_batch:
+            env["BER_CE_SCORE_BS"] = a.score_batch
         out = os.path.join(WORK, f"ce_folds_{a.name}_{what.replace(' ', '_')}.log")
         for k in range(1, 4):
             log(f"START {what} (try {k})")

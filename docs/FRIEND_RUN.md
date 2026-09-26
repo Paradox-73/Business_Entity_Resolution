@@ -1,5 +1,7 @@
 # GPU run on the RTX 4060 laptop (26–27 Sep)
 
+> Friend 1 (RTX 4060) runs this file's job (e5-base). Friend 2 (RTX A6000, 48 GB) runs a larger model: `docs/FRIEND2_RUN.md`. Different models, no duplicated work.
+
 **What this run does:** trains 3 transformer models (multilingual-e5-base, MIT licence) that re-check the "close calls" of our best model, and scores every close call with them. It needs a CUDA GPU with 8 GB. It does not need the competition data: a 329 MB bundle has only the names and addresses involved.
 
 **Why:** the transformer re-check is our biggest gain so far (leaderboard 0.9700 → 0.983159). Until now it was trained on half the labels with a small model on a 4 GB GPU. Here each model sees 2/3 of all labels (1.68M pairs instead of 0.83M), and the model is 2.4× bigger.

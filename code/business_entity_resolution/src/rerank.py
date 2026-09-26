@@ -177,7 +177,7 @@ def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
 class Scorer:
     """The trained transformer; call with lists of texts, returns logits. Batches are formed from texts of
     similar length (less padding), results come back in the input order."""
-    def __init__(self, bs=256):
+    def __init__(self, bs=int(os.environ.get("BER_CE_SCORE_BS", "256"))):
         import torch
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
         self.torch, self.bs = torch, bs

@@ -209,6 +209,7 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 
 ### 8.3 Runs now
 1. **Friend's RTX 4060 (8 GB), `docs/FRIEND_RUN.md`:** 3 transformer models (multilingual-e5-base), each trained on 2/3 of all labelled close calls incl. stage-1 ranks 3–5 (1.68M pairs, 2× the old half), scoring every close call out-of-fold and all test close calls. `ce_folds.py`, ~8–9 h. Inputs: `work/bundle_ce_x.zip` (329 MB). Returns 6 score files.
+1b. **Friend 2's RTX A6000 (48 GB), `docs/FRIEND2_RUN.md`:** the same 3-fold design with BAAI/bge-reranker-v2-m3 (Apache-2.0, 568M, a pretrained multilingual reranker), fully fine-tuned; ~5–7 h; files sent back after each model.
 2. **Kavya's laptop (4 GB):** the same with multilingual-e5-small (`ce_folds.py --name small`, ~6 h, started 14:56) → candidate **v7f**; the friend's e5-base files blended with it → candidate **v7g**. Its held-out result decides whether the 3-fold design beats the 2-halves design before the friend's files arrive.
 3. Then: stage 3 on each family, blend (`blend.py`), France rule (`fr_minrule.py`), `finalize.py`. Upload only if held-out (halves protocol) beats v7ens's 0.98813.
 

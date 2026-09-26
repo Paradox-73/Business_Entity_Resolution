@@ -1,0 +1,7 @@
+{
+ "base": "..\\..\\..\\submissions\\v7ens\\matching_results.tsv",
+ "scores": "E:\\Projects\\Amazon ML Challenge\\work\\ce\\test_scores_blend_ab_a2_frmin.parquet",
+ "strength": 0.5,
+ "france_added": 21155,
+ "mode": "ndiff add-only"
+}

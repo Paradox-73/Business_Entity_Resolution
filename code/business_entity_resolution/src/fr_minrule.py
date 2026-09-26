@@ -22,7 +22,8 @@ def main(ce_path, gb_path, out):
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     b = ce.join(gb, on=["q", "s"], how="left").join(s1, on="s", how="left")
     fr = pl.col("country") == "France"
-    new = pl.when(fr & pl.col("p2g").is_not_null()).then(pl.min_horizontal("p2", "p2g")).otherwise(pl.col("p2"))
+    # a France pair the GBDT never scored (stage-1 rank 3-5 extras) counts as GBDT 0: the transformer may not add it
+    new = pl.when(fr).then(pl.min_horizontal("p2", pl.col("p2g").fill_null(0.0))).otherwise(pl.col("p2"))
     b = b.with_columns(p2n=new.cast(pl.Float32))
     ch = b.filter(fr & (pl.col("p2n") != pl.col("p2")))
     log(f"France pairs lowered back to the GBDT probability: {ch.height} "

@@ -6,18 +6,32 @@ This writes those lower-ranked candidates (p1 >= MINP) so the transformer can re
   python topk5.py train [model_dir] -> WORK/models/<model_dir>/stage1_rank3_5.parquet  (out-of-fold p1, fold models)
   python topk5.py test  [model_dir] -> WORK/test_rank3_5_test_<model_dir>.parquet     (same stage-1 model as test)
 model_dir defaults to 'full' (stage 1 of v3 and v6). Columns: q, s, p1, r (rank by p1 in the record), [label, fold].
-Resumable: one part file per chunk under WORK/rank3_5_<split>_<model_dir>/.
+Resumable: one part file per chunk under WORK/rank3_5_<split>_<model_dir>/. Only records in WORK/ce/<split>_rows.parquet
+(the reranker's close calls; BER_TOPK_Q overrides) are scored.
 """
+import ctypes
 import glob
 import json
 import os
 import sys
+import time
 import numpy as np
 import polars as pl
 from common import WORK, log
 from pipeline import pairs_dir, train_meta, attach, load_model, score, X, FEATURES, N_FOLDS
 
 KMAX, MINP = 5, 0.005
+
+
+def free_gb():
+    class M(ctypes.Structure):
+        _fields_ = [("l", ctypes.c_ulong), ("load", ctypes.c_ulong), ("tot", ctypes.c_ulonglong), ("avail", ctypes.c_ulonglong),
+                    ("tp", ctypes.c_ulonglong), ("ap", ctypes.c_ulonglong), ("tv", ctypes.c_ulonglong), ("av", ctypes.c_ulonglong),
+                    ("ae", ctypes.c_ulonglong)]
+    m = M()
+    m.l = ctypes.sizeof(M)
+    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+    return m.avail / 2 ** 30
 
 
 def ranks(p):
@@ -42,11 +56,24 @@ def main(split, md_name="full"):
     files = sorted(glob.glob(os.path.join(pairs_dir(tag), "*_*.parquet")))
     if os.environ.get("BER_TOPK_SMOKE"):
         files = files[:1]
+    # only records the reranker rescores (close calls of v6's model; train: groups train/eval), which cuts the work ~5x
+    qsel = None
+    qf = os.environ.get("BER_TOPK_Q", os.path.join(WORK, "ce", f"{split}_rows.parquet"))
+    if os.path.exists(qf):
+        qsel = pl.read_parquet(qf)
+        qsel = (qsel.filter(pl.col("grp") != "mixed") if "grp" in qsel.columns else qsel).select(
+            pl.col("q").cast(pl.Int64)).unique()
+        log(f"restricted to {qsel.height} records from {qf}")
     parts = []
     for fpath in files:
         dst = os.path.join(pdir, os.path.basename(fpath))
         if not os.path.exists(dst):
-            p = pl.read_parquet(fpath)
+            n = 0
+            while free_gb() < 4 and n < 120:     # another job holds the RAM: wait (max 1 h)
+                time.sleep(30)
+                n += 1
+            p = pl.scan_parquet(fpath)
+            p = (p.join(qsel.lazy(), on="q", how="semi") if qsel is not None else p).collect()
             if split == "train":
                 p = attach(p, qmap)
                 p1 = np.zeros(p.height, np.float32)

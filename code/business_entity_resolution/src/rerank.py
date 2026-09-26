@@ -236,13 +236,26 @@ def score(chunk=200_000):
 S3FEATS = ["p1", "p2", "ce", "ce_margin", "ce_rank", "p2_margin", "n_cc"]
 
 
+# BER_S3_EXTRA=1: close calls also carry stage-1 candidates ranked 3..5 (topk5.py; p2 missing), so margins are taken
+# against the best OTHER candidate and the stage-1 rank is a feature
+EXTRA = os.environ.get("BER_S3_EXTRA") == "1"
+
+
 def _s3_features(r):
-    """Transformer score relative to the other close-call candidate of the same S2/S3 row."""
+    """Transformer score relative to the other close-call candidate(s) of the same S2/S3 row."""
     r = r.with_columns(n_cc=pl.len().over("q").cast(pl.Float32),
                        ce_rank=pl.col("ce").rank("ordinal", descending=True).over("q").cast(pl.Float32))
     for c in ("ce", "p2"):
-        other = pl.when(pl.len().over("q") > 1).then(pl.col(c).sum().over("q") - pl.col(c)).otherwise(None)
+        if EXTRA:
+            mx = pl.col(c).max().over("q")
+            second = pl.col(c).drop_nulls().top_k(2).min().over("q")
+            other = pl.when(pl.col(c).count().over("q") > 1).then(
+                pl.when(pl.col(c) == mx).then(second).otherwise(mx)).otherwise(None)
+        else:
+            other = pl.when(pl.len().over("q") > 1).then(pl.col(c).sum().over("q") - pl.col(c)).otherwise(None)
         r = r.with_columns((pl.col(c) - other).alias(f"{c}_margin"))
+    if EXTRA:
+        r = r.with_columns(p1_rank=pl.col("p1").rank("ordinal", descending=True).over("q").cast(pl.Float32))
     return r
 
 
@@ -267,7 +280,7 @@ def stage3():
     decision rule; the best rule on the eval half is saved as rule<sfx>.json (finalize.py format). Test: each
     side's scores go through the stage-3 model and the stage-3 probabilities are averaged."""
     import xgboost as xgb
-    params = dict(tree_method="hist", device="cuda", objective="binary:logistic", eta=0.05, max_depth=6,
+    params = dict(tree_method="hist", device=os.environ.get("BER_S3_DEVICE", "cuda"), objective="binary:logistic", eta=0.05, max_depth=6,
                   min_child_weight=20, subsample=0.8, colsample_bytree=0.9, seed=7)
     md = json.load(open(os.path.join(OUT, "select.json")))["model_dir"]
     sides = [x for x in os.environ.get("BER_S3_SIDES", "a,b").split(",")
@@ -275,7 +288,7 @@ def stage3():
              and os.path.exists(os.path.join(OUT, f"test_ce{'' if x == 'a' else '_' + x}.parquet"))]
     # BER_S3_SEG=1: stage 3 also sees the record's segment (source file, no address, non-Latin name, India)
     seg = os.environ.get("BER_S3_SEG") == "1"
-    feats = S3FEATS + (["src", "addr_missing", "name_nonlatin", "is_india"] if seg else [])
+    feats = S3FEATS + (["src", "addr_missing", "name_nonlatin", "is_india"] if seg else []) + (["p1_rank"] if EXTRA else [])
     tagx = "_" + "".join(sides) + ("_seg" if seg else "")     # e.g. _a, _ab; never overwrites the files v7 was built from
     tag = json.load(open(os.path.join(WORK, "models", md, "result.json")))["tag"]
 
@@ -304,6 +317,9 @@ def stage3():
     # held-out: p2 replaced by p3 on the close-call rows that have an out-of-sample transformer score
     oof = pl.read_parquet(os.path.join(WORK, "models", md, "oof.parquet"), columns=["q", "s", "p2"]).with_columns(
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+    if EXTRA:   # lower-ranked candidates join the table; the GBDT never scored them (p2 = 0 for its decisions)
+        oof = pl.concat([oof, r.select("q", "s").join(oof.select("q", "s"), on=["q", "s"], how="anti")
+                        .with_columns(p2=pl.lit(0.0, dtype=oof["p2"].dtype))])
     touched = r.select("q").unique().with_columns(t=pl.lit(True))
     new = (oof.join(r.select("q", "s", "p3"), on=["q", "s"], how="left").join(touched, on="q", how="left")
               .with_columns(p2n=pl.when(pl.col("t").is_null()).then(pl.col("p2")).otherwise(pl.col("p3").fill_null(0.0))))
@@ -345,6 +361,11 @@ def stage3():
             f"decisions differing at 0.5: {t.filter((pl.col(f'p3_{sides[0]}') >= 0.5) != (pl.col(f'p3_{sides[1]}') >= 0.5)).height}")
     te = pl.read_parquet(os.path.join(WORK, f"test_scores_{md}.parquet")).with_columns(
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+    if EXTRA:
+        xr = pl.read_parquet(os.path.join(OUT, "test_rows.parquet"), columns=["q", "s", "p1"]).with_columns(
+            pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64)).join(te.select("q", "s"), on=["q", "s"], how="anti")
+        te = pl.concat([te, xr.with_columns(pl.col("p1").cast(te["p1"].dtype), p2=pl.lit(0.0, dtype=te["p2"].dtype))
+                        .select(te.columns)])
     tt = t.select("q").unique().with_columns(tch=pl.lit(True))
     te = (te.join(t.select("q", "s", "p3"), on=["q", "s"], how="left").join(tt, on="q", how="left")
             .with_columns(p2=pl.when(pl.col("tch").is_null()).then(pl.col("p2"))
@@ -354,6 +375,33 @@ def stage3():
     log(f"wrote {dst} ({te.height} rows; {tt.height} S2/S3 rows re-scored); rule {kn} -> rule{tagx}.json")
 
 
+def extras(md, base_dir):
+    """OUT/{train,test}_rows.parquet = close calls of base_dir (same model md) + stage-1 candidates ranked 3..5 of the
+    same records (topk5.py outputs; p2 missing). Records keep their group (train/eval/mixed) from base_dir."""
+    tr = pl.read_parquet(os.path.join(base_dir, "train_rows.parquet")).with_columns(
+        pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+    x = pl.read_parquet(os.environ.get("BER_X_TRAIN", os.path.join(WORK, "models", "full", "stage1_rank3_5.parquet"))).with_columns(
+        pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+    s1 = pl.read_parquet(os.path.join(WORK, "train_s1.parquet"), columns=["entity_id", "country"]).select(
+        s=id_to_int("entity_id"), h=half("entity_id"), country="country")
+    x = (x.join(tr.select("q", "grp").unique("q"), on="q").join(tr.select("s", "q"), on=["q", "s"], how="anti")
+          .join(s1, on="s").with_columns(p2=pl.lit(None, dtype=tr["p2"].dtype), label=pl.col("label").cast(tr["label"].dtype),
+                                          fold=pl.col("fold").cast(tr["fold"].dtype), p1=pl.col("p1").cast(tr["p1"].dtype),
+                                          h=pl.col("h").cast(tr["h"].dtype)).select(tr.columns))
+    out = pl.concat([tr, x])
+    out.write_parquet(os.path.join(OUT, "train_rows.parquet"))
+    log(f"train: {tr.height} close-call rows + {x.height} rank 3-5 rows (positives {int(x['label'].sum())}); by group "
+        f"{x.group_by('grp').agg(pl.len(), pl.col('label').sum()).rows()}")
+    te = pl.read_parquet(os.path.join(base_dir, "test_rows.parquet")).with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+    xt = pl.read_parquet(os.environ.get("BER_X_TEST", os.path.join(WORK, "test_rank3_5_test_full.parquet"))).with_columns(
+        pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+    xt = (xt.join(te.select("q").unique(), on="q").join(te.select("q", "s"), on=["q", "s"], how="anti")
+            .with_columns(p1=pl.col("p1").cast(te["p1"].dtype), p2=pl.lit(None, dtype=te["p2"].dtype)).select(te.columns))
+    pl.concat([te, xt]).write_parquet(os.path.join(OUT, "test_rows.parquet"))
+    log(f"test: {te.height} close-call rows + {xt.height} rank 3-5 rows")
+    json.dump({"model_dir": md, "extras_of": base_dir}, open(os.path.join(OUT, "select.json"), "w"))
+
+
 def check(md, tag):
     """Does the transformer gain hold on another labelled split (tl2 = train split at test density)?
     Needs WORK/models/<md>/oof_<tag>.parquet (evaluate.py with BER_EVAL_SAVE=1). Side a only (transformer A never
@@ -361,7 +409,7 @@ def check(md, tag):
     scores reused from OUT/train_ce.parquet where the pair was scored before, the rest scored now; stage 3 for fold f
     is fitted on FULL's side-a rows of the other folds, so no row's own label reaches its score."""
     import xgboost as xgb
-    params = dict(tree_method="hist", device="cuda", objective="binary:logistic", eta=0.05, max_depth=6,
+    params = dict(tree_method="hist", device=os.environ.get("BER_S3_DEVICE", "cuda"), objective="binary:logistic", eta=0.05, max_depth=6,
                   min_child_weight=20, subsample=0.8, colsample_bytree=0.9, seed=7)
     b = pl.read_parquet(os.path.join(WORK, "models", md, f"oof_{tag}.parquet")).with_columns(
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
@@ -417,5 +465,7 @@ if __name__ == "__main__":
         score()
     elif cmd == "stage3":
         stage3()
+    elif cmd == "extras":
+        extras(sys.argv[2], sys.argv[3])
     elif cmd == "check":
         check(sys.argv[2], sys.argv[3])

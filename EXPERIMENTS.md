@@ -323,6 +323,29 @@ Setup for every number below: 100k matched train records per country with a Lati
 
 **Decision:** none of this reaches the leaderboard without a full rebuild of train and test pairs (~8 h) plus retraining stages 1-2 and re-scoring the new close calls with the transformers. If rebuilt, bundle in one rebuild: name max_df 10000-20000, word min_df 1, no-address k 100, state-code and ordinal cleaning, and dense e5 top-10 for all records (`embed.py encode_all` for every record, not only non-Latin). Otherwise these are the measured blocking alternatives for the methodology document.
 
+### 3-fold transformers: e5-small (laptop) + e5-base (friend 1, RTX 4060, 800k rows/fold); 26 Sep 21:00-23:30
+Same held-out pairs (labelled close calls whose record is in fold k; no compared model trained on them). AUC / top-1 = best candidate is the true S1 (records that have one):
+
+| fold | old A+B (v7ens) | e5-small (1.68M rows) | e5-base (800k rows) | mean of small+base logits |
+|---|---|---|---|---|
+| 0 (557k pairs) | 0.98875 / 0.98586 | 0.99121 / 0.98670 | 0.99007 / 0.98687 | **0.99168 / 0.98698** |
+| 1 (551k) | 0.98891 / 0.98576 | 0.99144 / 0.98653 | 0.99081 / 0.98655 | **0.99206 / 0.98679** |
+| 2 (551k) | 0.98830 / 0.98568 | 0.99084 / 0.98676 | 0.98994 / 0.98639 | **0.99141 / 0.98687** |
+
+Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_combo.sh`):
+
+| version | what | halves | all close calls rescored |
+|---|---|---|---|
+| v7f | e5-small folds, stage 3 | 0.98838 (+0.00025) | 0.98903 |
+| (family base) | e5-base folds, stage 3 | 0.98826 | 0.98890 |
+| v7f2 | e5-small + old A+B + A2, equal blend | 0.98835 (old transformers add nothing) | - |
+| **v7g** | stage 3 per family, blend 0.7 small / 0.3 base | **0.98845 (+0.00032)** | 0.98911 |
+| v7g2 | mean logits of small+base (`avg_family.py small base sb`), one stage 3 | 0.98844 | 0.98911 |
+
+- Each file comes in two France variants: `out_<v>` (v7ens France: transformer may only lower) and `out_<v>_num` (+ house-number veto, v7k rule): v7g France 852,055 -> 844,350 matched.
+- **Uploaded 26 Sep ~23:30: v7g_num** (last upload of the day). LB - 0.983159 = 0.85 x US/India change (held-out +0.00032) + 0.15 x France change (new transformer's France lowering + number veto). Clean France split: upload `out_v7g` (same file without the veto).
+- Friend 1's e5-base (800k rows) ranks below e5-small (all rows) on every fold: capping rows costs more than the bigger model gains. Friend 2 (A6000) trains bge-reranker-v2-m3 on all 1.68M rows, ~2.1 steps/s while another job (`xenc.py`) shared the card, 4.3 steps/s alone.
+
 ## Lessons (read before changing anything)
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).

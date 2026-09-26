@@ -270,11 +270,66 @@ France label-free audit (v7b vs v7b_frbase, 26 Sep 05:20): the transformer chang
 - Missed true pairs 169,650 of 3,815,794: in the reranker's close calls 86,694; never in stage-1 top 2 81,531 (reranker cannot see them); outside the close-call band only 1,425. Wrong predicted pairs 12,473: close calls 11,918, "certain" (p2 > 0.995) 555.
 - Widening the close-call band would gain almost nothing. The next unreachable block needs stage 1 to keep more than 2 candidates per record.
 
+### Blocking and cleaning audit (26 Sep 17:20-19:30, laptop; blocking only, no model retrained)
+Setup for every number below: 100k matched train records per country with a Latin-script name whose true S1 is in the eval half (crc32 % 1000 < 500, never seen by the fine-tuned e5), searched against ALL train S1 rows of the country (full density). Recall = share of true pairs in the shortlist; the production numbers reproduce `candidates.py` exactly (US 0.9868, India 0.9784). India non-Latin names are excluded (they already have the e5 search). Scripts: `dense_blocking_exp.py`, `blocking_variants.py`, `name_search_diag.py`, `name_cap_exp.py`, `ordinal_exp.py`, `combined_blocking_exp.py`; logs in `work/`.
+
+**All fixes together, added one at a time (`combined_blocking_exp.py`):**
+| Step | US recall | India recall | Candidates/record (US / India) |
+|---|---|---|---|
+| production shortlist | 0.9868 | 0.9784 | 31.4 / 30.3 |
+| + name search max_df 4000 -> 20000 | 0.9910 | 0.9836 | 31.5 / 30.4 |
+| + word searches min_df 2 -> 1 | 0.9921 | 0.9852 | 31.4 / 30.2 |
+| + no-address name search k 30 -> 100 | **0.9943** | **0.9884** | 34.5 / 33.3 |
+| + dense e5 top-10 (fine-tuned `e5_ft_addr`, all records) | **0.9971** | **0.9956** | 42.0 / 41.4 |
+| (production + dense e5 top-10 only) | 0.9941 | 0.9916 | 39.3 / 38.6 |
+- Misses fall from 1.32% to 0.29% (US) and 2.16% to 0.44% (India). The three lexical fixes alone match dense-only with fewer candidates, no GPU, no labels.
+- Not rebuilt, so the F0.5 effect is unmeasured. Estimate: the shortlist misses cost ~0.0047 held-out today (share of the 0.0068 "never in top 2" block); many recovered pairs are chain names with vague addresses, so expect +0.001-0.002 on US/India, not the full amount.
+
+**Name search is starved at full density (`name_search_diag.py`, US, 30k records whose cleaned name EQUALS their true S1's and is unique in S1):**
+| Name vectoriser | 3-grams kept per name (median) | names with 0 kept | top-10 recall on these exact-name records |
+|---|---|---|---|
+| min_df 2, max_df 4000 (production) | 4 | 3.2% | **0.860** (web domains 0.840) |
+| min_df 2, max_df 20000 | 12 | 0% | 0.9998 |
+- Examples with nothing left: 'thomastechnologies', 'safereal', 'superiordirect' (every 3-gram is in > 4000 US S1 names). Same failure as exp 7 for addresses (cap tuned on S10); the name search was never re-tuned. min_df makes no difference here.
+- Cost vs gain (`name_cap_exp.py`, union recall, same candidate count): max_df 10000 US +0.0033 / India +0.0032, name search 43 s / 25 s per 100k queries; 20000 US +0.0042 / India +0.0052, 124 s / 65 s (production 6 s). France S1 is 5x smaller than US train S1, so its cap bites less.
+
+**Dense e5 search for Latin names (`dense_blocking_exp.py`):**
+| | US | India |
+|---|---|---|
+| dense top-10 alone | 0.9843 | 0.9727 |
+| dense top-20 alone | 0.9876 (beats the whole TF-IDF union with 20 vs 31 candidates) | 0.9780 |
+| TF-IDF misses recovered by dense top-10 | 728 of 1,320 (chain names 63%, no address 34%) | 1,316 of 2,161 (chain 76%, no address 22%) |
+- Recovered pairs read as genuine (`work/dense_recovered_{US,India}.tsv`): squashed web domains ('novatrading.com' -> 'Nova Trading'), heavy typos ('Raj Ceonsultfnts'), spelled-out ordinals, word-order shuffles.
+- Exact GPU search (RTX 3050 Ti): ~1 ms/query against 1.32M US S1; encoding 3,300-3,600 texts/s. Full train+test estimate ~5 h on the laptop GPU. FAISS IVFFlat is worse than exact at useful speeds (US recall@20 0.873 at nprobe 8, 0.920 at nprobe 32, vs 0.9876 exact); not needed.
+- Off-the-shelf multilingual-e5-small on a 60k-S1 smoke run: about equal to the fine-tuned model for Latin names (not run at full size).
+
+**Other blocking variants (`blocking_variants.py`, one change at a time vs production):**
+| Variant | US union | India union | Cand/record change |
+|---|---|---|---|
+| word searches min_df 1 (hashing TF-IDF; min_df 2 hashing reproduces production 0.9870 / 0.9790) | +0.0017 | +0.0018 | 0 |
+| BM25 instead of TF-IDF (word searches) | +0.0000 | +0.0009 | 0 |
+| BM25 + min_df 1 | +0.0014 | +0.0030 | 0 |
+| comb k 20 -> 30 / 40 | +0.0018 / +0.0029 | +0.0029 / +0.0048 | +9 / +19 |
+| addr k 10 -> 20 | +0.0004 | +0.0001 | +6 / +4 |
+| no-address name k 30 -> 100 | +0.0016 | +0.0020 | +3 |
+| S1 initials added to the comb documents | +0.0000 (acronym records 0.965 -> 0.988) | **-0.0010** | 0 |
+| no learned abbreviation map (does the map help?) | **-0.0019** | -0.0002 | +0.6 |
+
+**Cleaning bugs found:**
+- **Indian state codes.** `maps.json` was learned on US+India pairs pooled, so `tn` -> 'tennessee' (88k India train records end in 'TN'); `dl` (170k) and `od` (16k) are not mapped; India S1 writes 'Tamil Nadu' / 'Delhi' / 'Orissa'. ~274k India records (6.6%) carry a systematic address mismatch. Fix (tn -> tamil nadu, dl -> delhi, od/odisha -> orissa): blocking +0.0003 only (state names are above the df cap), but address token-set of affected true pairs (6,870 in the sample) mean 91.2 -> 97.5, share >= 90 0.698 -> 0.911. A feature fix, not a blocking fix. The same pooled map turns French 'de' / 'la' into 'delaware' / 'louisiana' (both sides alike, so mostly harmless).
+- **Ordinals (`ordinal_exp.py`).** US records spell ordinals out ('eleventh street') in 1.3% of addresses vs 0.36% of S1, which writes '11th'. Normalising both sides (words -> digits, '11th' -> '11'): affected records (1.45%) recall 0.9352 -> 0.9834, their true-pair address token-set mean 89.7 -> 96.3 (>= 90: 0.664 -> 0.884); US union +0.0014.
+- **France acronym records.** Short France names are often initials of the S1 name ('SDS' = 'Securite Darts Sport'): 53.6% of 29,729 short-name France records have an S1 with equal initials, the same first house number and address token-set >= 80, vs 16.1% with names shuffled (chance) -> ~11k acronym records (~0.8% of France records). Train has the pattern too (45% of matched short-name India records are initials of their true S1; US 7%). No current feature links them; worth at most ~0.0005 LB.
+- Checked and fine: no junk-only addresses flagged as present (0 in every file); entity ids have no leading zeros, so the int round trip in `finalize.py` is exact; S1 halves and folds are consistent across `embed.py`, `pipeline.py` and `rerank.py`; the official validator is unmodified.
+
+**Decision:** none of this reaches the leaderboard without a full rebuild of train and test pairs (~8 h) plus retraining stages 1-2 and re-scoring the new close calls with the transformers. If rebuilt, bundle in one rebuild: name max_df 10000-20000, word min_df 1, no-address k 100, state-code and ordinal cleaning, and dense e5 top-10 for all records (`embed.py encode_all` for every record, not only non-Latin). Otherwise these are the measured blocking alternatives for the methodology document.
+
 ## Lessons (read before changing anything)
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
 - A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.
 - A relative `max_df` makes search cost grow with S1 size; use an absolute document-frequency cap for **search**, but compute similarity **features** with the full vocabulary.
+- **Every search's df cap must be checked at full density, not only the one that failed.** The address cap was fixed on 25 Sep, but the name cap (4000, tuned on S10) left a median US name with 4 3-grams and 3.2% with none; exact unique names were found only 86% of the time (audit 26 Sep).
+- Learned cleaning maps must be learned (or at least checked) per country: the pooled map sends India 'TN' to 'tennessee'.
 - Always time one chunk at test scale (US test S1 = 663k rows) before launching a full run.
 - Prediction share per country on test (v1): India 12.8% empty vs 5.6% singletons in train, so India is under-matched.

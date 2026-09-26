@@ -19,14 +19,30 @@ from common import WORK, log, read_truth, id_to_int
 from rerank import _decisions
 
 
+_MIXED = None
+
+
+def mixed_q():
+    """Records whose close calls span both S1 halves ("mixed"): no base scored them before the fold models, so
+    BER_BLEND_HALVES=1 keeps their GBDT p2 in every base (the protocol of v7ens's 0.98813)."""
+    global _MIXED
+    if _MIXED is None:
+        _MIXED = (pl.read_parquet(os.path.join(WORK, "ce", "train_rows.parquet"), columns=["q", "grp"])
+                    .filter(pl.col("grp") == "mixed").select(pl.col("q").cast(pl.Int64)).unique().with_columns(mx=pl.lit(True)))
+    return _MIXED
+
+
 def held_out(md, ce, sfx):
     oof = pl.read_parquet(os.path.join(WORK, "models", md, "oof.parquet"), columns=["q", "s", "p2"]).with_columns(
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     s3 = pl.read_parquet(os.path.join(WORK, ce, f"oof_s3{sfx}.parquet"), columns=["q", "s", "p3"]).with_columns(
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     touched = s3.select("q").unique().with_columns(t=pl.lit(True))
-    return (oof.join(s3, on=["q", "s"], how="left").join(touched, on="q", how="left")
-               .select("q", "s", p=pl.when(pl.col("t").is_null()).then(pl.col("p2")).otherwise(pl.col("p3").fill_null(0.0))))
+    if os.environ.get("BER_BLEND_HALVES") == "1":
+        touched = touched.join(mixed_q(), on="q", how="anti")
+        s3 = s3.join(mixed_q(), on="q", how="anti")
+    d = oof.join(s3, on=["q", "s"], how="full", coalesce=True).join(touched, on="q", how="left")
+    return d.select("q", "s", p=pl.when(pl.col("t").is_null()).then(pl.col("p2").fill_null(0.0)).otherwise(pl.col("p3").fill_null(0.0)))
 
 
 def combine(frames, w):

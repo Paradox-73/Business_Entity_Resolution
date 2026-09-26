@@ -1,0 +1,19 @@
+{
+ "note": "stage 3 sides ['a', 'b'], base full_cons; best rule on eval-half S1 (rerank.py stage3)",
+ "x": [],
+ "y": [],
+ "decision": {
+  "default": {
+   "type": "expf",
+   "floor": 0.5,
+   "alpha": 1.0,
+   "prob": "p2"
+  }
+ },
+ "base": 0.9815087766530061,
+ "best": 0.9880534107284495,
+ "all_S1": {
+  "base": 0.9815653940927582,
+  "best_rule_score": 0.9880802090942482
+ }
+}

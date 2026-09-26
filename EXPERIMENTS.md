@@ -239,6 +239,7 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 - France's accepted count (861k in v7ens) is already ~97.6% of the expected true count, so France loses by picking partly the wrong records (~4% wrong, ~6% missed), not by a threshold. The French address cleaning of v6 looks correct on samples but its LB went down; not reused.
 
 **26 Sep 15:00, next design (3-fold transformers):** fold side k trains on all close calls whose record is in another pipeline fold (incl. "mixed" records and stage-1 ranks 3-5): 1.68M pairs per model vs 0.83M per half-model, and every close call gets an out-of-fold score. Laptop: e5-small (`ce_folds.py --name small`); RTX 4060: e5-base (`docs/FRIEND_RUN.md`). Stage 3 prints the "halves protocol" score (mixed records keep GBDT p2), comparable with v7ens 0.98813.
+- **Early check 16:30** (`work/cmp_fold0.py`): e5-small fold-0 model vs transformer A (v7ens) on the SAME 280,159 held-out pairs (eval group, fold 0, neither trained on them): AUC 0.98865 -> **0.99113**, log loss 0.13020 -> **0.11716**, best candidate is the true S1 0.98568 -> **0.98657**. Same model size, so the gain is the 3-fold design (2x data, mixed records, ranks 3-5). Green light for the e5-base run.
 
 **Transformer at test-like density (tl2, `rerank.py check`, side A only, stage 3 fitted on FULL rows of other folds; 26 Sep 05:40):**
 | Base | tl2 GBDT | tl2 + transformer | US | India |

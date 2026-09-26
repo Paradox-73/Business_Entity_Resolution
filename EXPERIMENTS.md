@@ -224,6 +224,8 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 | v7sib | v3 (`full_sib`) | A + B | 0.98015 -> 0.98780 | v3 base narrows the gap to v6 base from 0.0014 to 0.0003 |
 
 | v7blend | 0.7 v6 + 0.3 v3 reranked | A + B | 0.98801 (weights 0.5/0.5: 0.98795) | no gain over v7b; not recommended |
+| v7d | v6 | A + B, close calls + stage-1 ranks 3-5 (`BER_S3_EXTRA=1`) | 0.98151 -> 0.98811 (all S1 0.98815) | +0.00006 over v7b/v7c; changes 0.4% of test S1 rows vs v7c; France min rule |
+| (stage 3 + segment features) | v6 | A + B | 0.98806 | no gain; not built |
 
 **Transformer at test-like density (tl2, `rerank.py check`, side A only, stage 3 fitted on FULL rows of other folds; 26 Sep 05:40):**
 | Base | tl2 GBDT | tl2 + transformer | US | India |

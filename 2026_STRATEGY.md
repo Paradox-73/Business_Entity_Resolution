@@ -226,6 +226,11 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 ### 8.5 Honest expectation
 - Measured levers: the 3-fold transformer design is untested; earlier transformer variants moved held-out by ≤ 0.0001, the first transformer by +0.0065. A realistic Sunday LB is **0.984–0.986**; 0.9906 needs France near 0.99, which no measured result supports yet.
 
+### 8.6 Night 26→27 Sep (Gathik + Claude Code): blocking audit, deep-learning matcher, v8 — details in EXPERIMENTS.md
+- **Blocking audit (laptop, full density):** the name search's df cap (4000, tuned on S10) starves it at full size; with the name cap 10000–20000, word searches min_df 1, no-address k 100 and a dense e5 search for every record, shortlist recall goes US 0.9868 → 0.9971, India 0.9784 → 0.9956 (Latin names). Cleaning bugs: India state codes (pooled map sends 'TN' to 'tennessee', 'DL'/'OD' unmapped; 6.6% of India records) and ordinals ('eleventh' vs '11th'). All of it is opt-in in the code with `BER_V8=1`; defaults are unchanged.
+- **Deep learning as the final matcher (lab GPU server, 80k-S1 sample at full density):** fine-tuned bge-reranker-v2-m3 alone 0.99321 vs GBDT 0.98998 on the same candidates; stack 0.99362; the close-call-only design 0.99351. Transformers are the better matcher, the close-call design is right, and the remaining lever is transformer quality. Sample numbers are optimistic (not comparable with 0.98813).
+- **v8 (running overnight on the lab server, GPU 2 only):** v8 blocking/cleaning + stage-1 GBDT trained on a sample of train records + 3-fold bge-reranker-v2-m3 on close calls + stack, test streamed chunk by chunk (the shared disk cannot hold full pair features). Two files: **v8a** (France: transformer may only lower p + legal-form veto) and **v8b** (France without the transformer). Not validated at full density against v7ens; no stage 2 (its group features need all train records). Upload only if the team agrees; one change at a time vs v7ens is not possible (new blocking + new model + no stage 2 at once).
+
 # Appendix A — Problem statement (verbatim, student_resource/README.md)
 
 ## ML Challenge 2026 Problem Statement

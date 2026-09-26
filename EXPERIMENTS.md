@@ -323,6 +323,28 @@ Setup for every number below: 100k matched train records per country with a Lati
 
 **Decision:** none of this reaches the leaderboard without a full rebuild of train and test pairs (~8 h) plus retraining stages 1-2 and re-scoring the new close calls with the transformers. If rebuilt, bundle in one rebuild: name max_df 10000-20000, word min_df 1, no-address k 100, state-code and ordinal cleaning, and dense e5 top-10 for all records (`embed.py encode_all` for every record, not only non-Latin). Otherwise these are the measured blocking alternatives for the methodology document.
 
+### Deep learning as the final matcher (26 Sep 22:00 - 27 Sep 00:00 IST, lab GPU server, RTX PRO 6000 Blackwell 96 GB)
+Question: is a transformer a better FINAL matcher than the GBDT, or only a close-call reranker? Script `dl_matcher_exp.py` (+ `dlx_analyse.py`), all in memory, run with `BER_V8=1` (audited blocking and cleaning).
+- **Sample:** 40k eval-half train S1 rows per country (US, India; 80,218 total), all their true records, unmatched records at the same rate (374,827 records). Candidates searched against ALL train S1 rows of the country: 15.07M pairs, **shortlist recall 0.9962** (production shortlist 0.9851), confirming the audit at scale. 3 folds by true S1.
+- **Same candidates for every method:** each record's top 5 by the GBDT's out-of-fold score (keeps 0.9906 of true pairs). Same decision-rule search for every method (thresholds 0.05-0.5, expected-F0.5 floors 0.1-0.5, alpha 1-2).
+- **Cross-encoder:** BAAI/bge-reranker-v2-m3 (Apache-2.0, 568M), fully fine-tuned, raw "name | address" text, max 128 tokens, batch 64, lr 2e-5, 1 epoch on 240k balanced pairs per fold (8.4 steps/s on the Blackwell GPU, ~12 min per fold incl. scoring 625k pairs).
+
+| Final matcher (same top-5 candidates, macro F0.5 over the 80k sampled S1) | All | US | India |
+|---|---|---|---|
+| GBDT, 57 features (production stage-1 recipe, XGBoost depth 10, 600 rounds) | 0.98998 | 0.99042 | 0.98954 |
+| **cross-encoder alone** | **0.99321** | 0.99308 | 0.99336 |
+| stack GBDT + cross-encoder (XGBoost on p, logit, ranks, margins), all records | **0.99362** | 0.99335 | 0.99389 |
+| team design: stack only on close calls (34% of records), GBDT elsewhere | 0.99351 | 0.99327 | 0.99378 |
+- **The transformer is the better final matcher (+0.0032 over the GBDT, both countries); the GBDT adds +0.0004 on top.** The close-call design captures almost all of it (0.99351 vs 0.99362), so scoring every record is not needed. The lever is transformer quality (bigger model, fully fine-tuned, more data), i.e. the direction of the e5-base / bge runs.
+- **Not comparable with v7ens's 0.98813:** the sample leaves out records of non-sampled S1 rows, so there are fewer competing look-alikes (optimistic, like S10); the GBDT here is stage 1 only (stage 2's group features were worth ~+0.006 at full density). Only comparisons within the table are valid.
+- Every method's best rule used a low threshold (0.1-0.15) on this sample; that reflects the missing look-alikes, not a rule to copy to test.
+
+**Server run log (what failed, so it is not repeated):**
+- **Full rebuild does not fit the shared disk:** pair features measured 67 bytes/pair; ~850M train+test pairs at ~42 candidates/record = ~57 GB plus 18 GB of all-record embeddings. `/home` hit 100%; all our jobs were stopped and ~36 GB freed. Anything at full size must stream (score chunks, keep only top-K), not store features.
+- **The kernel OOM killer killed our train build** during another user's memory spike (available RAM 1 GB for a moment). Build chunks halved (`BER_CHUNK=125000`) and a watchdog stopped our test build when free RAM < 6 GB.
+- **Corrupted copy:** a stopped `tar | ssh` copy kept running in the background and wrote `train_source2.tsv` at the same time as the second copy: train S2 had 4,517,104 rows instead of 5,034,616 (380k true pairs missing; first smoke run showed shortlist recall 0.949). Re-sent and verified every dataset file by md5 / content hash. Lesson: after stopping a transfer, check the process is gone; verify row counts of every input before building.
+- A negative-sampling bug in the first full run (negatives computed from the uncapped positive count: 120k positives / 57k negatives) was fixed and the run repeated.
+
 ## Lessons (read before changing anything)
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
@@ -331,5 +353,7 @@ Setup for every number below: 100k matched train records per country with a Lati
 - A relative `max_df` makes search cost grow with S1 size; use an absolute document-frequency cap for **search**, but compute similarity **features** with the full vocabulary.
 - **Every search's df cap must be checked at full density, not only the one that failed.** The address cap was fixed on 25 Sep, but the name cap (4000, tuned on S10) left a median US name with 4 3-grams and 3.2% with none; exact unique names were found only 86% of the time (audit 26 Sep).
 - Learned cleaning maps must be learned (or at least checked) per country: the pooled map sends India 'TN' to 'tennessee'.
+- **On a shared server, disk and RAM belong to everyone.** Measure bytes/row on one chunk before a full build; stream instead of storing when the total does not fit; never let our job fill `/home`. Pin GPU work with `CUDA_VISIBLE_DEVICES`.
+- `pkill -f <pattern>` / `pgrep -f` over ssh also match the ssh command's own shell when the pattern is in the command line: use `[p]attern` or kill by pid.
 - Always time one chunk at test scale (US test S1 = 663k rows) before launching a full run.
 - Prediction share per country on test (v1): India 12.8% empty vs 5.6% singletons in train, so India is under-matched.

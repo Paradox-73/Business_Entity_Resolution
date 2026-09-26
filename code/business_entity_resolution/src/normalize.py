@@ -8,6 +8,7 @@ Address cleaning: local-script phrases and short forms are mapped with tables le
 the training pairs (see learn_maps.py), junk tokens removed, numbers extracted without
 leading zeros.
 """
+import os
 import polars as pl
 
 LEGAL = ["private", "pvt", "limited", "ltd", "llp", "llc", "inc", "incorporated", "lnc", "corp",
@@ -52,6 +53,22 @@ def name_exprs(col="business_name"):
     ]
 
 
+# BER_V8=1 (audit 26 Sep, EXPERIMENTS.md): India state codes the pooled learned map gets wrong ('tn' -> 'tennessee';
+# 'dl' / 'od' unmapped while India S1 writes 'Tamil Nadu' / 'Delhi' / 'Orissa'; India rows only, 'TN' is Tennessee
+# in US addresses), and ordinals ('eleventh street' in records vs '11th street' in S1 -> both '11 street').
+V8 = os.environ.get("BER_V8") == "1"
+INDIA_ABBREV = {"tn": "tamil nadu", "dl": "delhi", "od": "orissa", "odisha": "orissa"}
+ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh",
+            "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth",
+            "twentieth"]
+
+
+def _ordinals(e):
+    """'eleventh' -> '11', '11th' / '2nd' -> '11' / '2' (both sides, so the street tokens agree)."""
+    e = (" " + e + " ").str.replace_many([f" {w} " for w in ORDINALS], [f" {i + 1} " for i in range(len(ORDINALS))])
+    return _squash(e.str.replace_all(r"\b(\d+)(?:st|nd|rd|th)\b", "$1"))
+
+
 def addr_exprs(script_map=None, abbrev_map=None, col="business_address"):
     raw = pl.col(col).fill_null("")
     x = raw.str.to_lowercase()
@@ -60,8 +77,15 @@ def addr_exprs(script_map=None, abbrev_map=None, col="business_address"):
     x = _ascii_lower(x).str.replace_all(_NONLATIN, " ")
     x = x.str.replace_all(r"[^a-z0-9]+", " ")
     x = _squash(x.str.replace_all(_JUNK, " "))
-    if abbrev_map:
+    if abbrev_map and V8:
+        tok = x.str.split(" ")
+        x = pl.when(pl.col("country") == "India").then(
+            tok.list.eval(pl.element().replace(dict(abbrev_map, **INDIA_ABBREV))).list.join(" ")).otherwise(
+            tok.list.eval(pl.element().replace(abbrev_map)).list.join(" "))
+    elif abbrev_map:
         x = (x.str.split(" ").list.eval(pl.element().replace(abbrev_map)).list.join(" "))
+    if V8:
+        x = _ordinals(x)
     nums = x.str.extract_all(r"\d+").list.eval(pl.element().str.strip_chars_start("0")).list.eval(
         pl.element().filter(pl.element() != ""))
     return [

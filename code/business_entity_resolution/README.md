@@ -21,6 +21,8 @@ python pipeline.py predict full test    # -> output/matching_results.tsv, output
 Folders can be changed with env vars `BER_DATA`, `BER_WORK`, `BER_OUT`.
 Analysis tools: `error_analysis.py <tag>` (points lost per mistake type), `blocking_exp.py <country> <n>` (shortlist recall/time at full density), `embed.py eval`.
 
+`BER_V8=1` switches on the audited blocking and cleaning (name-search cap 10000, no-address k 100, word searches min_df 1, dense e5 search for every record after `embed.py encode_all`, India state codes, ordinals); unset = the v2–v7 settings. Blocking audit scripts: `dense_blocking_exp.py`, `blocking_variants.py`, `name_search_diag.py`, `name_cap_exp.py`, `ordinal_exp.py`, `combined_blocking_exp.py`. Deep-learning matcher experiment: `dl_matcher_exp.py`, `dlx_analyse.py` (GPU server runbook: `docs/SERVER_RUN.md` in the repo root).
+
 ## Files
 - `common.py` — paths, TSV reading, integer id encoding, the macro F0.5 metric.
 - `normalize.py` — name/address cleaning (accents, web domains, d/b/a aliases, legal forms, junk tokens, numbers).

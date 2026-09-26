@@ -250,8 +250,8 @@ def sibling_features(b, qattr):
     b = (b.join(qattr, on="q", how="left")
           .join(qattr.rename({"q": "sib_q", "nm": "nm_s", "ad": "ad_s", "n1": "n1_s"}), on="sib_q", how="left"))
     fill = lambda c: b[c].fill_null("").to_list()
-    ns = cpdist(fill("nm"), fill("nm_s"), scorer=fuzz.token_set_ratio, workers=-1, dtype=np.float32)
-    ad = cpdist(fill("ad"), fill("ad_s"), scorer=fuzz.token_set_ratio, workers=-1, dtype=np.float32)
+    ns = cpdist(fill("nm"), fill("nm_s"), scorer=fuzz.token_set_ratio, workers=int(os.environ.get("BER_THREADS", "-1")), dtype=np.float32)
+    ad = cpdist(fill("ad"), fill("ad_s"), scorer=fuzz.token_set_ratio, workers=int(os.environ.get("BER_THREADS", "-1")), dtype=np.float32)
     miss = b["sib_q"].is_null()
     b = b.with_columns(
         sib_name_tset=pl.when(miss).then(None).otherwise(pl.Series(ns)),
@@ -281,8 +281,8 @@ def consensus_features(b, qattr, parts=8):
         x = (key.filter(pl.col("h") == i).drop("h").join(mem, on="s").filter(pl.col("qm") != pl.col("q"))
                 .join(qattr, on="q", how="left"))
         fill = lambda c: x[c].fill_null("").to_list()
-        ns = cpdist(fill("nm"), fill("nm_m"), scorer=fuzz.token_set_ratio, workers=-1, dtype=np.float32)
-        ad = cpdist(fill("ad"), fill("ad_m"), scorer=fuzz.token_set_ratio, workers=-1, dtype=np.float32)
+        ns = cpdist(fill("nm"), fill("nm_m"), scorer=fuzz.token_set_ratio, workers=int(os.environ.get("BER_THREADS", "-1")), dtype=np.float32)
+        ad = cpdist(fill("ad"), fill("ad_m"), scorer=fuzz.token_set_ratio, workers=int(os.environ.get("BER_THREADS", "-1")), dtype=np.float32)
         no_ad = (pl.col("ad").fill_null("") == "") | (pl.col("ad_m").fill_null("") == "")
         x = x.with_columns(ns=pl.Series(ns), ad=pl.when(no_ad).then(None).otherwise(pl.Series(ad)),
                            eq=pl.when(pl.col("n1").is_null() | pl.col("n1_m").is_null()).then(None)

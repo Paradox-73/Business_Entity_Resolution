@@ -142,6 +142,33 @@ def encode_all():
             log(f"{split} {name}: {v.shape}")
 
 
+def encode_all_records(splits=("train", "test"), bs=2048):
+    """Embeddings for EVERY S1 and S2/S3 row (audit 26 Sep: a dense top-10 search for all records, not only
+    non-Latin names, lifts shortlist recall US 0.9943 -> 0.9971, India 0.9884 -> 0.9956 on top of the lexical fixes).
+    S1 -> emb/{split}_s1all.npz; S2/S3 -> emb/{split}_qall_v.npy (written as a memmap) + {split}_qall_ids.npy."""
+    os.makedirs(EMB, exist_ok=True)
+    enc = Encoder(FT)
+    for split in splits:
+        s1 = pl.read_parquet(os.path.join(WORK, f"{split}_s1.parquet"), columns=["entity_id", "business_name", "addr"])
+        s1 = s1.with_columns(text_col())
+        np.savez(os.path.join(EMB, f"{split}_s1all.npz"), ids=np.array(s1["entity_id"].to_list()),
+                 v=enc.encode(s1["text"].to_list(), bs=bs))
+        log(f"{split} S1: {s1.height}")
+        del s1
+        q = pl.concat([pl.read_parquet(os.path.join(WORK, f"{split}_s{k}.parquet"),
+                                       columns=["entity_id", "business_name", "addr"]) for k in (2, 3)])
+        np.save(os.path.join(EMB, f"{split}_qall_ids.npy"), np.array(q["entity_id"].to_list(), dtype=object))
+        out = np.lib.format.open_memmap(os.path.join(EMB, f"{split}_qall_v.npy.tmp"), mode="w+", dtype=np.float16,
+                                        shape=(q.height, enc.model.config.hidden_size))
+        step = 500_000
+        for a in range(0, q.height, step):
+            out[a:a + step] = enc.encode(q[a:a + step].select(text_col())["text"].to_list(), bs=bs)
+            log(f"{split} S2/S3: {min(a + step, q.height)}/{q.height}")
+        out.flush()
+        del out
+        os.replace(os.path.join(EMB, f"{split}_qall_v.npy.tmp"), os.path.join(EMB, f"{split}_qall_v.npy"))
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "train":
@@ -150,3 +177,5 @@ if __name__ == "__main__":
         log(f"recall@10 fine-tuned: {recall_at_k(FT):.4f}")
     elif cmd == "encode":
         encode_all()
+    elif cmd == "encode_all":
+        encode_all_records()

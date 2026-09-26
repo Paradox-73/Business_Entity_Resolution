@@ -9,6 +9,10 @@ Blocking, searched from each S2/S3 row towards S1 rows of the SAME country (unio
 Search matrices drop terms shared by more than MAX_DF_* S1 rows (keeps search cost bounded; word-level
 terms stay informative at full density, char 3-grams of addresses do not - EXPERIMENTS.md exp 7);
 similarity FEATURES use the full vocabulary.
+
+BER_V8=1 switches on the v8 blocking (audit 26 Sep, EXPERIMENTS.md "Blocking and cleaning audit"): name search
+max_df 4000 -> 10000, no-address name k 30 -> 100, word searches with min_df 1 (hashed, HashTfidf) and the dense e5
+search for EVERY record (embed.py encode_all). Defaults (unset) are the production settings of v2-v7.
 """
 import os
 import time
@@ -22,16 +26,47 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sparse_dot_topn import sp_matmul_topn
 from common import WORK, log
 
+V8 = os.environ.get("BER_V8") == "1"
 K_NAME = 10
-K_NAME_NOADDR = 30
+K_NAME_NOADDR = 100 if V8 else 30     # v8: +0.16 US / +0.20 India recall for ~3 candidates/record
 K_ADDR = 10
 K_COMB = 20
 K_EMB = 10
-MAX_DF_NAME = 4000
+MAX_DF_NAME = 10000 if V8 else 4000   # v8: at 4000 a median US name kept 4 3-grams at full density, 3.2% none
 MAX_DF_WORD = 5000
-CHUNK = 250_000
-THREADS = 11
+CHUNK = int(os.environ.get("BER_CHUNK", "250000"))
+THREADS = int(os.environ.get("BER_THREADS", "11"))
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+class HashTfidf:
+    """v8 word 1-2-gram TF-IDF with min_df=1 (every S1 term kept; +0.17 US / +0.18 India recall at no candidate
+    cost) without a vocabulary dict, which would be huge at min_df=1: hashed terms, sublinear tf x smooth idf fitted
+    on S1, terms in more than max_df S1 rows or in none dropped, L2-normalised rows (as sklearn)."""
+
+    def __init__(self, max_df, nf=1 << 24):
+        from sklearn.feature_extraction.text import HashingVectorizer
+        self.hv = HashingVectorizer(analyzer="word", ngram_range=(1, 2), token_pattern=r"\S+", lowercase=False,
+                                    n_features=nf, alternate_sign=False, norm=None, dtype=np.float32)
+        self.max_df = max_df
+
+    def fit_transform(self, texts):
+        S = self.hv.transform(texts).tocsr()
+        n = S.shape[0]
+        df = np.bincount(S.indices, minlength=S.shape[1])
+        self.idf = ((np.log((1 + n) / (1 + df)) + 1) * ((df >= 1) & (df <= self.max_df))).astype(np.float32)
+        return self._weigh(S)
+
+    def transform(self, texts):
+        return self._weigh(self.hv.transform(texts).tocsr())
+
+    def _weigh(self, M):
+        M.data = ((1 + np.log(M.data)) * self.idf[M.indices]).astype(np.float32)
+        M.eliminate_zeros()
+        nr = np.sqrt(np.asarray(M.multiply(M).sum(1)).ravel())
+        nr[nr == 0] = 1
+        M.data /= np.repeat(nr, np.diff(M.indptr)).astype(np.float32)
+        return M
 
 S_COLS = ["entity_id", "name_full", "name_core", "name_ns", "addr", "addr_nums", "business_address"]
 Q_COLS = S_COLS + ["src", "name_is_domain", "name_has_alias", "name_nonlatin", "addr_missing", "addr_nonlatin"]
@@ -70,7 +105,7 @@ def _rowdot(A, B, qi, si):
 
 
 def _fuzz(a, b, scorer):
-    return cpdist(a, b, scorer=scorer, workers=-1, dtype=np.float32)
+    return cpdist(a, b, scorer=scorer, workers=int(os.environ.get("BER_THREADS", "-1")), dtype=np.float32)
 
 
 def _alnum(col):
@@ -85,7 +120,9 @@ class CountryIndex:
         self.s1 = (s1.select(S_COLS).with_row_index("s_row")
                      .with_columns(s_name_count=pl.len().over("name_core").cast(pl.Float32),
                                    alnum=_alnum("business_address")))
-        self.vn, self.va, self.vc = _vec(MAX_DF_NAME), _wvec(MAX_DF_WORD), _wvec(MAX_DF_WORD)
+        self.vn = _vec(MAX_DF_NAME)
+        self.va, self.vc = ((HashTfidf(MAX_DF_WORD), HashTfidf(MAX_DF_WORD)) if V8
+                            else (_wvec(MAX_DF_WORD), _wvec(MAX_DF_WORD)))
         self.Bn = self.vn.fit_transform(_pad(self.s1["name_ns"]))
         self.Ba = self.va.fit_transform(self.s1["addr"].to_list())
         self.Bc = self.vc.fit_transform(_comb(self.s1))
@@ -94,7 +131,20 @@ class CountryIndex:
         self.Fa = self.fa.fit_transform(_pad(self.s1["addr"]))
         self.E, self.qemb = None, None
         path = os.path.join(WORK, "emb", f"{split}_s1.npz")
-        if os.path.exists(path):
+        allq = os.path.join(WORK, "emb", f"{split}_qall_v.npy")
+        if V8 and os.path.exists(allq):
+            # every S2/S3 record has an embedding (embed.py encode_all): vectors memory-mapped and joined per chunk,
+            # so a build process does not hold 10M vectors and an id dict in RAM
+            z = np.load(os.path.join(WORK, "emb", f"{split}_s1all.npz"))
+            pos = pl.DataFrame({"entity_id": z["ids"], "erow": np.arange(len(z["ids"]))})
+            er = self.s1.select("entity_id").join(pos, on="entity_id", how="left", maintain_order="left")["erow"]
+            assert er.null_count() == 0, "S1 rows without an embedding"
+            self.E = torch.tensor(z["v"][er.to_numpy()], device=DEV)
+            del z
+            self.qemb = (pl.DataFrame({"entity_id": np.load(os.path.join(WORK, "emb", f"{split}_qall_ids.npy"),
+                                                           allow_pickle=True)}).with_row_index("vrow"),
+                         np.load(allq, mmap_mode="r"))
+        elif os.path.exists(path):
             z = np.load(path)
             pos = dict(zip(z["ids"].tolist(), range(len(z["ids"]))))
             rows = [pos.get(e, -1) for e in self.s1["entity_id"].to_list()]
@@ -113,6 +163,12 @@ class CountryIndex:
         if self.E is None:
             return None, None
         pos, V = self.qemb
+        if isinstance(pos, pl.DataFrame):
+            m = q.select("entity_id").with_row_index("qi").join(pos, on="entity_id").sort("qi")
+            if m.height == 0:
+                return None, None
+            qi, vi = m["qi"].to_numpy().astype(np.int64), m["vrow"].to_numpy().astype(np.int64)
+            return qi, torch.tensor(np.asarray(V[vi]), device=DEV)
         idx = [(i, pos[e]) for i, e in enumerate(q["entity_id"].to_list()) if e in pos]
         if not idx:
             return None, None

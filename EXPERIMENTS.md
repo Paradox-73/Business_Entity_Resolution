@@ -214,6 +214,17 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 - tl2 sits ~0.004 below FULL, close to the US/India LB level (~0.976 from the v5 probe), and ranks v2 < v3 like the LB.
 - v6's model is +0.0015 over v3's on tl2, so v6's LB drop most likely came from its France cleaning, not the consensus features. v7 keeps v6's model for US/India and the old (v3) France cleaning.
 
+### Transformer versions, night 26 Sep (rerank.py; held-out = eval-half S1, best of 17 decision rules)
+| Version | Base model | Transformers | Held-out: GBDT -> with transformer | Notes |
+|---|---|---|---|---|
+| v7 | v6 (`full_cons`) | A (trained on non-eval half) | 0.98094 (thr 0.65) -> 0.98794 (thr 0.65) | built 02:51 |
+| **v7b** | v6 | A + B (B trained on the eval half; stage 3 learns from both halves; test = mean of A's and B's stage-3 probabilities) | 0.98151 -> **0.98805** (expF floor 0.5); all S1 0.98157 -> 0.98808 | A and B disagree at 0.5 on 44k of 2.76M test pairs; the averaging is not measurable on held-out |
+| v7b_frbase | v6 | as v7b, France rows without transformer | same | France matched records 893k vs v7b 877k |
+| **v7c** | v6 | as v7b; France: p = min(GBDT p2, stage-3 p) | same | France 861k matched; see audit below |
+| v7sib | v3 (`full_sib`) | A + B | 0.98015 -> 0.98780 | v3 base narrows the gap to v6 base from 0.0014 to 0.0003 |
+
+France label-free audit (v7b vs v7b_frbase, 26 Sep 05:20): the transformer changes 42,924 of 259,452 France S1 rows (16.5%; US 0%, by construction). Records it removes: house number differs from S1 20%, name word differs 73% (the known France look-alike pattern). Records it adds: house number differs 34%. Records both keep: 1.6%. So its France removals look right and its additions mostly wrong -> v7c keeps only the removals. The same profile on US/India is not informative (true US/India pairs change house number 16% of the time).
+
 ### Remaining held-out misses of full_cons (eval S1, GBDT expF rule; 26 Sep 03:20)
 - Missed true pairs 169,650 of 3,815,794: in the reranker's close calls 86,694; never in stage-1 top 2 81,531 (reranker cannot see them); outside the close-call band only 1,425. Wrong predicted pairs 12,473: close calls 11,918, "certain" (p2 > 0.995) 555.
 - Widening the close-call band would gain almost nothing. The next unreachable block needs stage 1 to keep more than 2 candidates per record.

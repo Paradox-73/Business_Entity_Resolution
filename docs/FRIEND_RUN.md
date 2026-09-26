@@ -4,7 +4,7 @@
 
 **Why:** the transformer re-check is our biggest gain so far (leaderboard 0.9700 → 0.983159). Until now it was trained on half the labels with a small model on a 4 GB GPU. Here each model sees 2/3 of all labels (1.68M pairs instead of 0.83M), and the model is 2.4× bigger.
 
-**Time:** about 2.5–3 h per model, 8–9 h for all 3 (estimate from the 4 GB laptop: e5-base trained at 90 pairs/s and scored 714 pairs/s there). The first training steps print the real speed.
+**Time:** about 1.8 h per model with `--train-rows 800000` (5–6 h for all 3; 8–9 h without the cap) (estimate from the 4 GB laptop: e5-base trained at 90 pairs/s and scored 714 pairs/s there). The first training steps print the real speed.
 
 ---
 
@@ -42,11 +42,13 @@ python ce_folds.py --model intfloat/multilingual-e5-base --name base --smoke
 
 It must end with `DONE. Send back: …_smoke.parquet`. If it fails, send Kavya the file `work/ce_folds_base_smoke.log` and the logs `work/ce_folds_base_*.log`.
 
-## 3. Full run (8–9 h)
+## 3. Full run (~5–6 h)
 
 ```bash
-python ce_folds.py --model intfloat/multilingual-e5-base --name base
+python ce_folds.py --model intfloat/multilingual-e5-base --name base --train-rows 800000
 ```
+
+`--train-rows 800000` (26 Sep 16:00): each model trains on 800k of its 1.68M pairs (still ~1.6x more than before) so the GPU is free by Sunday morning for a France job. If this run is already more than ~1 h in without the flag, let it finish instead of restarting.
 
 - Progress: `work/ce_folds_base.log` (one line per step) and `work/ce_folds_base_train_fold_0.log` (a line every 500 training steps, e.g. `step 500/52500`).
 - If the GPU runs out of memory, the step is retried up to 3 times automatically. If it still fails, add `--gc --half-emb` (less memory, ~30% slower), then `--batch 16`.

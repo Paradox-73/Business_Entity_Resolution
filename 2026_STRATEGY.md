@@ -36,7 +36,10 @@ The official problem statement, rules and video transcript are copied **word for
 | v7sib | v3 model + transformers A, B | 0.98780 (tl2 0.98724) | — | not yet |
 | v7d | v7c + stage-1 candidates ranked 3–5 rescored | 0.98811 | — | not yet |
 | **v7ens** | v7c + e5-base transformer (A2), blended 0.7/0.3 | 0.98813 | **0.983159** (best) | yes, 26 Sep |
-| v7ens_frempty | PROBE: v7ens with every France row empty | — | — | recommended next upload: splits 0.983159 into US/India and France |
+| v7ens_frempty | PROBE: v7ens with every France row empty | — | **0.848792** → US/India ~0.9887, France ~0.952 | yes, 26 Sep |
+| v7h | v7ens + France descriptor-swap veto | — | — | **no**: refuted on labelled US/India (swaps are 98–99% true) |
+| v7i | v7ens, transformer may also ADD France matches | — | **0.982636** → France −0.0035 | yes, 26 Sep |
+| v7ens_frbase | PROBE: v7ens, France without transformer | — | — | ready: measures the transformer's France removals |
 | v7blend | 0.7 v6-reranked + 0.3 v3-reranked | 0.98801 | — | not recommended |
 | LB leader | — | — | **0.990621** (26 Sep) | — |
 
@@ -209,9 +212,15 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 2. **Kavya's laptop (4 GB):** the same with multilingual-e5-small (`ce_folds.py --name small`, ~6 h, started 14:56) → candidate **v7f**; the friend's e5-base files blended with it → candidate **v7g**. Its held-out result decides whether the 3-fold design beats the 2-halves design before the friend's files arrive.
 3. Then: stage 3 on each family, blend (`blend.py`), France rule (`fr_minrule.py`), `finalize.py`. Upload only if held-out (halves protocol) beats v7ens's 0.98813.
 
-### 8.4 France (15% of the score, likely the larger gap)
-- In use: legal-form veto; transformer may only lower a France probability (its France additions looked like look-alikes: house number differs in 34% of added pairs vs 1.6% of pairs both methods keep).
-- After the probe: if France is the gap, test on the LB the variants already saved (v7b = France additions allowed, v7b_frbase = France without transformer) and a stricter France rule for house-number conflicts (needs street-number parsing that skips "Appartement 22", "etage 4").
+### 8.4 France (15% of the score, ~70% of the gap) — checks of 26 Sep 15:40–16:10
+- Probe: US/India ~0.9887, France ~0.952 (changes vs v3 are assumption-free: +0.0127 / +0.0158).
+- Every France rule is now checked on labelled US/India train first (same data generator), because France has no labels:
+  - descriptor swap marks fakes → **refuted** (98–99% true in US/India); v7h not uploaded;
+  - legal-form conflict marks fakes → **confirmed** (5.2% / 0.0% true); veto kept;
+  - France under-accepts (per-pattern rates far below US) → **refuted by the count bound**: France accepts 861k of ~882k expected true matches (3.4 per S1 as in US/India), so the loss is which records, not how many;
+  - France shortlist misses → **small**: 99.05% of same-name same-number pairs are shortlisted (US train: such pairs 99.3% true).
+- LB: transformer ADDITIONS in France cost −0.0035 (v7i). Its REMOVALS are untested: `v7ens_frbase` measures them with one upload.
+- The friend's scores are used for France with the same setting as v7ens (removals only) unless v7ens_frbase says otherwise.
 
 ### 8.5 Honest expectation
 - Measured levers: the 3-fold transformer design is untested; earlier transformer variants moved held-out by ≤ 0.0001, the first transformer by +0.0065. A realistic Sunday LB is **0.984–0.986**; 0.9906 needs France near 0.99, which no measured result supports yet.

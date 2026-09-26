@@ -229,6 +229,15 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 | (A2 alone) | v6 | e5-base (A2), 420k rows of the non-eval half, 16-bit frozen word table, batch 16 | 0.98790 | about equal to e5-small A (0.98794) with half the data |
 | **v7ens** | v6 | 0.7 x (A+B stage 3) + 0.3 x (A2 stage 3); France min rule | **0.98813** (0.5/0.5 also 0.98813) | best held-out; changes 0.4-1.5% of test S1 rows vs v7c (France 3,797, India 3,099, US 2,605). **LB 0.983159** (26 Sep; v3 0.9700; leader 0.990621) |
 
+**France checks, 26 Sep 15:40-17:00 (probe v7ens_frempty LB 0.848792 -> US/India ~0.9887, France ~0.952; France = ~70% of the gap):**
+| France hypothesis (no France labels) | Label check on US/India train | Verdict |
+|---|---|---|
+| Descriptor swap ("Calais Amicale" -> "Calais Services") marks fakes (v7h) | swap candidates are TRUE 98.9% (US) / 98.2% (India): drop a word + add a generic suffix is normal noise | **refuted, v7h not uploaded** |
+| Legal-form conflict marks fakes (veto in v7a..v7ens) | conflicts TRUE 5.2% (US) / 0.0% (India) | **confirmed, kept** |
+| France rejects noisy true records (acceptance per change pattern far below US true rates: swap+same number 66.8% vs 91.7%, same name+other number 13.9% vs 42.7%) | per-pattern recalibration costs 0.002 on labelled US (0.98691 -> 0.98493) and would accept 1.01M France records (half strength 0.95M) vs ~0.88M expected true (3.4 per S1 as in US/India) | **refuted by the count bound, not built as a version** |
+| Transformer additions in France are fakes (min rule in v7c..v7ens) | its basis compared added pairs with "kept by both" (easy pairs), not with true pairs; US true pairs change house number 10.8% | **basis flawed -> v7i removes the rule (+14.2k France records, 874.9k vs ~0.88M expected)** |
+- France's accepted count (861k in v7ens) is already ~97.6% of the expected true count, so France loses by picking partly the wrong records (~4% wrong, ~6% missed), not by a threshold. The French address cleaning of v6 looks correct on samples but its LB went down; not reused.
+
 **26 Sep 15:00, next design (3-fold transformers):** fold side k trains on all close calls whose record is in another pipeline fold (incl. "mixed" records and stage-1 ranks 3-5): 1.68M pairs per model vs 0.83M per half-model, and every close call gets an out-of-fold score. Laptop: e5-small (`ce_folds.py --name small`); RTX 4060: e5-base (`docs/FRIEND_RUN.md`). Stage 3 prints the "halves protocol" score (mixed records keep GBDT p2), comparable with v7ens 0.98813.
 
 **Transformer at test-like density (tl2, `rerank.py check`, side A only, stage 3 fitted on FULL rows of other folds; 26 Sep 05:40):**

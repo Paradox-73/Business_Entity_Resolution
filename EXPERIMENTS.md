@@ -226,6 +226,8 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 | v7blend | 0.7 v6 + 0.3 v3 reranked | A + B | 0.98801 (weights 0.5/0.5: 0.98795) | no gain over v7b; not recommended |
 | v7d | v6 | A + B, close calls + stage-1 ranks 3-5 (`BER_S3_EXTRA=1`) | 0.98151 -> 0.98811 (all S1 0.98815) | +0.00006 over v7b/v7c; changes 0.4% of test S1 rows vs v7c; France min rule |
 | (stage 3 + segment features) | v6 | A + B | 0.98806 | no gain; not built |
+| (A2 alone) | v6 | e5-base (A2), 420k rows of the non-eval half, 16-bit frozen word table, batch 16 | 0.98790 | about equal to e5-small A (0.98794) with half the data |
+| **v7ens** | v6 | 0.7 x (A+B stage 3) + 0.3 x (A2 stage 3); France min rule | **0.98813** (0.5/0.5 also 0.98813) | best held-out; changes 0.4-1.5% of test S1 rows vs v7c (France 3,797, India 3,099, US 2,605) |
 
 **Transformer at test-like density (tl2, `rerank.py check`, side A only, stage 3 fitted on FULL rows of other folds; 26 Sep 05:40):**
 | Base | tl2 GBDT | tl2 + transformer | US | India |

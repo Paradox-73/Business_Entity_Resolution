@@ -227,7 +227,9 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 | v7d | v6 | A + B, close calls + stage-1 ranks 3-5 (`BER_S3_EXTRA=1`) | 0.98151 -> 0.98811 (all S1 0.98815) | +0.00006 over v7b/v7c; changes 0.4% of test S1 rows vs v7c; France min rule |
 | (stage 3 + segment features) | v6 | A + B | 0.98806 | no gain; not built |
 | (A2 alone) | v6 | e5-base (A2), 420k rows of the non-eval half, 16-bit frozen word table, batch 16 | 0.98790 | about equal to e5-small A (0.98794) with half the data |
-| **v7ens** | v6 | 0.7 x (A+B stage 3) + 0.3 x (A2 stage 3); France min rule | **0.98813** (0.5/0.5 also 0.98813) | best held-out; changes 0.4-1.5% of test S1 rows vs v7c (France 3,797, India 3,099, US 2,605) |
+| **v7ens** | v6 | 0.7 x (A+B stage 3) + 0.3 x (A2 stage 3); France min rule | **0.98813** (0.5/0.5 also 0.98813) | best held-out; changes 0.4-1.5% of test S1 rows vs v7c (France 3,797, India 3,099, US 2,605). **LB 0.983159** (26 Sep; v3 0.9700; leader 0.990621) |
+
+**26 Sep 15:00, next design (3-fold transformers):** fold side k trains on all close calls whose record is in another pipeline fold (incl. "mixed" records and stage-1 ranks 3-5): 1.68M pairs per model vs 0.83M per half-model, and every close call gets an out-of-fold score. Laptop: e5-small (`ce_folds.py --name small`); RTX 4060: e5-base (`docs/FRIEND_RUN.md`). Stage 3 prints the "halves protocol" score (mixed records keep GBDT p2), comparable with v7ens 0.98813.
 
 **Transformer at test-like density (tl2, `rerank.py check`, side A only, stage 3 fitted on FULL rows of other folds; 26 Sep 05:40):**
 | Base | tl2 GBDT | tl2 + transformer | US | India |

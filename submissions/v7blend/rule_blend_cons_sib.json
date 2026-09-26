@@ -1,0 +1,15 @@
+{
+ "note": "blend [['full_cons', 'ce', '_ab'], ['full_sib', 'ce_sib', '_ab']] weights [0.7, 0.30000000000000004] (blend.py)",
+ "x": [],
+ "y": [],
+ "decision": {
+  "default": {
+   "type": "expf",
+   "floor": 0.5,
+   "alpha": 1.0,
+   "prob": "p2"
+  }
+ },
+ "base": 0.9880534107284495,
+ "best": 0.9880084209475689
+}

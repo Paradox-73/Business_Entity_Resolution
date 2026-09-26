@@ -1,0 +1,5 @@
+[   52.1s] weights [0.3, 0.7]: best 0.98790 with {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}
+[   97.6s] weights [0.5, 0.5]: best 0.98795 with {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}
+[  143.5s] weights [0.7, 0.30000000000000004]: best 0.98801 with {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}
+[  223.7s] BEST blend [0.7, 0.30000000000000004]: 0.98801 ({"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}); single bases: full_cons 0.98805, full_sib 0.98780
+[  230.1s] wrote test_scores_blend_cons_sib.parquet (10713750 rows) and ce/rule_blend_cons_sib.json

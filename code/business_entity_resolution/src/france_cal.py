@@ -172,8 +172,59 @@ def build(scores, base_tsv, out_dir, strength=1.0):
     log(f"wrote {out_dir}/matching_results.tsv (US/India rows from {base_tsv})")
 
 
+def build_ndiff(scores, base_tsv, out_dir, strength=1.0):
+    """France only, ADD-only: for best-candidate patterns with a different house number ("|ndiff"), raise acceptance
+    to strength x (US train true rate) + (1 - strength) x (current rate), adding the not-yet-accepted records with the
+    highest probability first. Pairs set to 0 by the legal-form veto are never added; every other France decision of
+    base_tsv is kept, US/India rows are copied unchanged."""
+    rates = {p: tuple(v) for p, v in json.load(open(os.path.join(WORK, "us_pattern_rates.json"))).items()}
+    s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
+        s=id_to_int("entity_id"), c="country")
+    frs = s1.filter(pl.col("c") == "France").select("s")
+    base = pl.read_csv(base_tsv, separator="\t", quote_char=None, infer_schema_length=0).with_columns(
+        pl.col("matched_entity_ids").fill_null(""))
+    bpairs = (base.with_columns(pl.col("matched_entity_ids").str.split(",")).explode("matched_entity_ids")
+                  .filter(pl.col("matched_entity_ids") != "").select(s=id_to_int("source1_entity_id"), q=id_to_int("matched_entity_ids"))
+                  .join(frs, on="s"))
+    b = pl.read_parquet(scores, columns=["q", "s", "p2"]).with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64)).join(frs, on="s")
+    b = veto_fr(attach_text(b, "test"))
+    top = b.sort("p2", descending=True).unique("q", keep="first").filter(pl.col("p2") > 0)
+    taken = bpairs.select("q").unique().with_columns(tk=pl.lit(True))
+    top = top.join(taken, on="q", how="left").with_columns(acc=pl.col("tk").is_not_null()).drop("tk")
+    adds = []
+    for (pat,), g in top.filter(pl.col("pat").str.ends_with("|ndiff")).group_by("pat"):
+        r = rates.get(pat, (None, 0))
+        if r[0] is None or r[1] < 200:
+            continue
+        cur = g["acc"].mean()
+        target = strength * r[0] + (1 - strength) * cur
+        k = int(round(target * g.height)) - int(g["acc"].sum())
+        if k > 0:
+            add = g.filter(~pl.col("acc")).sort("p2", descending=True).head(k)
+            adds.append(add.select("q", "s"))
+            log(f"   {pat:14s} n {g.height:7d} accepted {cur:.3f} -> {(g['acc'].sum() + add.height) / g.height:.3f} "
+                f"(US true {r[0]:.3f}); added {add.height}, their p2 from {add['p2'].min():.3f} to {add['p2'].max():.3f}")
+    adds = pl.concat(adds) if adds else pl.DataFrame({"q": [], "s": []}, schema={"q": pl.Int64, "s": pl.Int64})
+    newp = pl.concat([bpairs.select("q", "s"), adds.select("q", "s")]).unique()
+    log(f"France: base {bpairs.height} matched records + {adds.height} number-changed records = {newp.height}")
+    fr = newp.group_by("s").agg(pl.col("q").sort()).with_columns(
+        fr_ids=pl.col("q").list.eval(int_to_id("")).list.join(","), source1_entity_id=int_to_id("s")).select("source1_entity_id", "fr_ids")
+    isfr = frs.select(source1_entity_id=int_to_id("s"), is_fr=pl.lit(True))
+    out = (base.join(isfr, on="source1_entity_id", how="left", maintain_order="left")
+               .join(fr, on="source1_entity_id", how="left", maintain_order="left")
+               .with_columns(matched_entity_ids=pl.when(pl.col("is_fr")).then(pl.col("fr_ids").fill_null("")).otherwise(pl.col("matched_entity_ids")))
+               .select("source1_entity_id", "matched_entity_ids"))
+    os.makedirs(out_dir, exist_ok=True)
+    out.write_csv(os.path.join(out_dir, "matching_results.tsv"), separator="\t", quote_style="never")
+    json.dump({"base": base_tsv, "scores": scores, "strength": strength, "france_added": adds.height, "mode": "ndiff add-only"},
+              open(os.path.join(out_dir, "result.json"), "w"), indent=1)
+    log(f"wrote {out_dir}/matching_results.tsv")
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "check":
         check()
+    elif sys.argv[1] == "ndiff":
+        build_ndiff(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]) if len(sys.argv) > 5 else 1.0)
     else:
         build(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]) if len(sys.argv) > 5 else 1.0)

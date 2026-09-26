@@ -1,6 +1,6 @@
 # AMLC 2026 — Business Entity Resolution: full record of what was done
 
-Updated 25 Sep 2026, ~22:15 IST (after all five day-1 uploads). Written for cross-checking: every step, setting, number and known risk.
+Updated 26 Sep 2026, ~08:10 IST (status table; sections below describe the day-1 pipeline, see EXPERIMENTS.md for the night's transformer work). Written for cross-checking: every step, setting, number and known risk.
 Sources for numbers: `EXPERIMENTS.md` (Appendix E), `submissions/LOG.md` (Appendix F), logs in `work/`.
 The official problem statement, rules and video transcript are copied **word for word** in Appendices A–D.
 
@@ -27,10 +27,18 @@ The official problem statement, rules and video transcript are copied **word for
 | v4 | trained on "test-like" data made by deleting pairs of dropped S1 rows (see §5.6) | 0.9775 (test-like, not comparable) | **0.9614** (−0.0086) | yes |
 | v6a | v4 + consensus features + calibration + France cleaning | 0.97966 (test-like) | — | no (built on v4's broken base) |
 | v6 | v3 base (FULL data) + consensus stage-2 features + France rows from French-cleaned rebuild | 0.98151 (FULL) | **0.9673** (−0.0027) | yes |
-| v7 | PROBE: v6 US/India rows + v3 France rows | 0.98151 (FULL) | ready for 26 Sep | — |
+| v7probe | v6 US/India rows + v3 France rows | 0.98151 (FULL) | — | no (replaced) |
+| v7a | v3 + France legal-form veto | 0.98015 (FULL) | — | not yet |
+| v7 | v6 model + **transformer reranker** (e5-small cross-encoder, one half) on close calls + France veto | 0.98794 | — | not yet |
+| v7b | v6 model + two cross-fitted transformers (A, B), expected-F0.5 rule + veto | **0.98805**; test-like split (tl2) 0.97798 → **0.98747** | — | not yet |
+| v7b_frbase | v7b, France rows without transformer | 0.98805 | — | not yet |
+| **v7c** | v7b; in France the transformer may only LOWER a probability (its France additions looked like look-alikes) | 0.98805 | — | **recommended first upload 26 Sep** |
+| v7sib | v3 model + transformers A, B | 0.98780 (tl2 0.98724) | — | not yet |
+| v7d | v7c + stage-1 candidates ranked 3–5 rescored | 0.98811 | — | not yet |
+| v7blend | 0.7 v6-reranked + 0.3 v3-reranked | 0.98801 | — | not recommended |
 | LB leader | — | — | ~0.984–0.987 | — |
 
-Submissions used on day 1: 5 of 5 (v2, v3, v5, v4, v6). Best LB so far: **v3, 0.9700**.
+Submissions used on day 1: 5 of 5 (v2, v3, v5, v4, v6). Best LB so far: **v3, 0.9700**. Night 25→26 Sep (details: EXPERIMENTS.md): the transformer reranker lifts held-out by +0.0065 and the test-like split by +0.0095; expected LB for v7c ≈ 0.85 × ~0.987 (US/India, from tl2) + 0.15 × France (~0.94, unknown) ≈ 0.98.
 
 ---
 

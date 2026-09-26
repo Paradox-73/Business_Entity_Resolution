@@ -28,9 +28,16 @@ OUT = os.environ.get("BER_CE_DIR", os.path.join(WORK, "ce"))          # rows/sco
 # Two transformers, cross-fitted on the two S1 halves: side "a" trains on group "train" and scores group "eval";
 # side "b" trains on group "eval" and scores group "train". Stage 3 then learns from both groups, and test
 # uses the average of both sides' stage-3 probabilities.
+# Fold sides (26 Sep): side "f0".."f2" trains on every close call whose record is in another pipeline fold (fold != k,
+# all groups incl. "mixed") and scores fold k, so all close calls get an out-of-fold score and each model sees 2/3 of
+# the labels (halves: 1/2, and "mixed" records never). BER_CE_NAME tags a model family: files *_<name>f0.
 SIDE = os.environ.get("BER_CE_SIDE", "a")
-SFX = "" if SIDE == "a" else "_" + SIDE          # more models per half: side "a2" = another transformer on group "train"
+NAME = os.environ.get("BER_CE_NAME", "")
+FOLD = int(SIDE[1:]) if SIDE[:1] == "f" and SIDE[1:].isdigit() else None
+SFX = "" if SIDE == "a" else "_" + (NAME + SIDE if FOLD is not None else SIDE)   # half sides: "a2" = 2nd model on group "train"
 TRAIN_GRP, SCORE_GRP = ("train", "eval") if SIDE.startswith("a") else ("eval", "train")
+TRAIN_SEL = (pl.col("fold") != FOLD) if FOLD is not None else (pl.col("grp") == TRAIN_GRP)
+SCORE_SEL = (pl.col("fold") == FOLD) if FOLD is not None else (pl.col("grp") == SCORE_GRP)
 FT = os.environ.get("BER_CE_MODEL", os.path.join(WORK, "ce", "model" + SFX))  # the trained transformer (shared)
 # BER_CE_REUSE=<another BER_CE_DIR>: reuse that folder's scores of the same transformer for pairs already scored
 REUSE = os.environ.get("BER_CE_REUSE", "")
@@ -96,22 +103,29 @@ def _pairs(rows, split):
 def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
-    rows = pl.read_parquet(os.path.join(OUT, "train_rows.parquet")).filter(pl.col("grp") == TRAIN_GRP)
+    rows = pl.read_parquet(os.path.join(OUT, "train_rows.parquet")).filter(TRAIN_SEL)
     rows = rows.sample(fraction=1.0, shuffle=True, seed=0)
     if LIMIT:
         rows = rows.head(LIMIT)
     r = _pairs(rows, "train")
-    log(f"transformer side {SIDE}: training rows {r.height} (group {TRAIN_GRP}), positives {r['label'].sum()} -> {FT}")
+    log(f"transformer side {SIDE}: training rows {r.height} ({TRAIN_SEL}), positives {r['label'].sum()} -> {FT}")
     tok = AutoTokenizer.from_pretrained(base)
     m = AutoModelForSequenceClassification.from_pretrained(base, num_labels=1).to(DEV)
-    small = torch.cuda.get_device_properties(0).total_memory < 8e9
+    small = torch.cuda.get_device_properties(0).total_memory < 7e9
     bf16 = torch.cuda.is_bf16_supported()
-    if small:      # 4 GB laptop GPU: freeze the word table (most of a multilingual model's weights), checkpoint
+    # word table frozen (most of a multilingual model's weights; also what every earlier run did): 4 GB GPUs always,
+    # bigger GPUs unless BER_CE_FREEZE=0. Gradient checkpointing (slower, less memory): 4 GB GPUs, or BER_CE_GC=1.
+    if small or os.environ.get("BER_CE_FREEZE", "1") == "1":
         m.base_model.embeddings.word_embeddings.weight.requires_grad_(False)
         if os.environ.get("BER_CE_HALF_EMB"):    # frozen table in 16 bit (e5-base: saves 384 MB of GPU memory)
             m.base_model.embeddings.word_embeddings.to(torch.bfloat16 if bf16 else torch.float16)
+    if small or os.environ.get("BER_CE_GC") == "1":
         m.gradient_checkpointing_enable()
+    if small:
         bs, lr = min(int(os.environ.get("BER_CE_BS", bs)), 32), max(lr, 3e-5)
+    else:
+        bs, lr = int(os.environ.get("BER_CE_BS", 32)), float(os.environ.get("BER_CE_LR", 3e-5))
+    log(f"GPU {torch.cuda.get_device_name(0)}: batch {bs}, lr {lr}, bf16 {bf16}, checkpointing {small or os.environ.get('BER_CE_GC') == '1'}")
     opt = torch.optim.AdamW([p for p in m.parameters() if p.requires_grad], lr=lr, weight_decay=0.01)
     steps = max(1, r.height // bs)
     sch = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=steps, pct_start=0.06)
@@ -190,7 +204,7 @@ def score(chunk=200_000):
     crash (out of memory) resumes at the last finished chunk. Pairs already scored by the same transformer in
     BER_CE_REUSE's folder are copied instead of scored."""
     sc = None
-    for split, flt in (("train", pl.col("grp") == SCORE_GRP), ("test", pl.lit(True))):
+    for split, flt in (("train", SCORE_SEL), ("test", pl.lit(True))):
         dst = os.path.join(OUT, f"{split}_ce{SFX}{'_smoke' if LIMIT else ''}.parquet")   # smoke test never overwrites
         if os.path.exists(dst) and not LIMIT:
             log(f"{dst} exists, kept")
@@ -289,7 +303,7 @@ def stage3():
     # BER_S3_SEG=1: stage 3 also sees the record's segment (source file, no address, non-Latin name, India)
     seg = os.environ.get("BER_S3_SEG") == "1"
     feats = S3FEATS + (["src", "addr_missing", "name_nonlatin", "is_india"] if seg else []) + (["p1_rank"] if EXTRA else [])
-    tagx = "_" + "".join(sides) + ("_seg" if seg else "")     # e.g. _a, _ab; never overwrites the files v7 was built from
+    tagx = os.environ.get("BER_S3_TAG") or ("_" + "".join(sides) + ("_seg" if seg else ""))   # e.g. _a, _ab
     tag = json.load(open(os.path.join(WORK, "models", md, "result.json")))["tag"]
 
     def add_seg(df, split_tag):
@@ -328,10 +342,21 @@ def stage3():
         pl.col("s").cast(pl.Int64)), on="s")
     truth_all = read_truth().select(s=id_to_int("s1_id"), q=id_to_int("q_id"))
     res = {}
+    # "halves" protocol = every run before 26 Sep 10:00 (v7ens 0.98813): records whose close calls span both S1 halves
+    # ("mixed") keep the GBDT p2. Fold sides score them too; the rule is chosen on all rescored rows (as on test).
+    newh = None
+    if "grp" in r.columns and r.filter(pl.col("grp") == "mixed").height:
+        mixed = r.filter(pl.col("grp") == "mixed").select("q").unique().with_columns(mx=pl.lit(True))
+        newh = new.join(mixed, on="q", how="left").with_columns(
+            p2n=pl.when(pl.col("mx").is_null()).then(pl.col("p2n")).otherwise(pl.col("p2"))).drop("mx")
     for name, ss in (("eval", allS.filter(pl.col("h") < 500).select("s")), ("all", allS.select("s"))):
         tr_ = truth_all.join(ss, on="s")
         g, n_ = _decisions(new, "p2", tr_, ss), _decisions(new, "p2n", tr_, ss)
         res[name] = (g, n_)
+        if newh is not None and name == "eval":
+            nh = _decisions(newh, "p2n", tr_, ss)
+            kh = max(nh, key=nh.get)
+            log(f"BEST eval, halves protocol (comparable with v7ens 0.98813): {nh[kh]:.5f} ({kh})")
         for k in n_:
             log(f"{name} S1 ({ss.height}) {k}: GBDT {g[k]:.5f} -> with transformer {n_[k]:.5f}")
         kg, kn = max(g, key=g.get), max(n_, key=n_.get)

@@ -5,7 +5,7 @@
 
 Per base, the probability of a (record, S1) pair is the stage-3 probability on its close-call rows (held-out:
 <ce_dir>/oof_s3<sfx>.parquet; test: <ce_dir>/test_scores_ce<sfx>.parquet) and the GBDT p2 elsewhere. The blend is
-the weighted mean over bases; a pair outside a base's top-2 counts as 0 for that base. Held-out macro F0.5 on the
+the weighted mean over the bases that score the pair (26 Sep: was 0 for a missing base). Held-out macro F0.5 on the
 eval-half S1 rows is printed for each weight and decision rule, next to each base alone; the best is written as
 WORK/test_scores_blend_<name>.parquet + WORK/ce/rule_blend_<name>.json (finalize.py format; pass model dir of the
 first base).
@@ -34,7 +34,10 @@ def combine(frames, w):
     for i, f in enumerate(frames):
         f = f.rename({"p": f"p{i}"})
         out = f if out is None else out.join(f, on=["q", "s"], how="full", coalesce=True)
-    return out.with_columns(p2=sum(w[i] * pl.col(f"p{i}").fill_null(0.0) for i in range(len(frames))).cast(pl.Float32))
+    # a pair missing in a base (outside its candidate rows) gets the weighted mean of the bases that have it
+    num = sum(w[i] * pl.col(f"p{i}").fill_null(0.0) for i in range(len(frames)))
+    den = sum(pl.when(pl.col(f"p{i}").is_null()).then(0.0).otherwise(w[i]) for i in range(len(frames)))
+    return out.with_columns(p2=(num / den).cast(pl.Float32))
 
 
 def main(name, specs):

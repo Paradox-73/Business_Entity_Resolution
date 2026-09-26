@@ -1,6 +1,6 @@
 # AMLC 2026 — Business Entity Resolution: full record of what was done
 
-Updated 26 Sep 2026, ~08:10 IST (status table; sections below describe the day-1 pipeline, see EXPERIMENTS.md for the night's transformer work). Written for cross-checking: every step, setting, number and known risk.
+Updated 26 Sep 2026, ~15:00 IST (status table, §8 plan; §3–7 describe the day-1 pipeline, EXPERIMENTS.md has the transformer work). Written for cross-checking: every step, setting, number and known risk.
 Sources for numbers: `EXPERIMENTS.md` (Appendix E), `submissions/LOG.md` (Appendix F), logs in `work/`.
 The official problem statement, rules and video transcript are copied **word for word** in Appendices A–D.
 
@@ -35,10 +35,12 @@ The official problem statement, rules and video transcript are copied **word for
 | **v7c** | v7b; in France the transformer may only LOWER a probability (its France additions looked like look-alikes) | 0.98805 | — | **recommended first upload 26 Sep** |
 | v7sib | v3 model + transformers A, B | 0.98780 (tl2 0.98724) | — | not yet |
 | v7d | v7c + stage-1 candidates ranked 3–5 rescored | 0.98811 | — | not yet |
+| **v7ens** | v7c + e5-base transformer (A2), blended 0.7/0.3 | 0.98813 | **0.983159** (best) | yes, 26 Sep |
+| v7ens_frempty | PROBE: v7ens with every France row empty | — | — | recommended next upload: splits 0.983159 into US/India and France |
 | v7blend | 0.7 v6-reranked + 0.3 v3-reranked | 0.98801 | — | not recommended |
-| LB leader | — | — | ~0.984–0.987 | — |
+| LB leader | — | — | **0.990621** (26 Sep) | — |
 
-Submissions used on day 1: 5 of 5 (v2, v3, v5, v4, v6). Best LB so far: **v3, 0.9700**. Night 25→26 Sep (details: EXPERIMENTS.md): the transformer reranker lifts held-out by +0.0065 and the test-like split by +0.0095; expected LB for v7c ≈ 0.85 × ~0.987 (US/India, from tl2) + 0.15 × France (~0.94, unknown) ≈ 0.98.
+Submissions used on day 1: 5 of 5 (v2, v3, v5, v4, v6). Day 2 so far: v7ens **0.983159** (+0.0132 over v3). Gap to the leader: **0.0075**. Details of the night's work: EXPERIMENTS.md.
 
 ---
 
@@ -187,12 +189,32 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 
 ---
 
-## 8. Next steps (26 Sep; details in `docs/AWS_PLAN.md`)
-1. **Fix validation first.** `tl2` = train S1 thinned to test counts BEFORE the search, look-alike records at test's rate, then the normal build (laptop overnight). Score the existing fold models on it out-of-fold (v2, v3, v4, v6 models). It is trustworthy only if it ranks them like the LB (v4 ≪ v2 < v3). Then every later change is validated on tl2, and calibration/decision are tuned there.
-2. **Upload v7** (v6 US/India + v3 France) → separates the consensus effect from the France cleaning. France keeps v3's rows unless v7 shows the cleaning was not the cause.
-3. **Overnight on the laptop GPU (small models)**, then AWS with base models if they gain: **reranker** (`rerank.py`, transformer reading both records, close calls only: 3.4M test pairs) → stage 3 on top of the GBDT; validated on tl2.
-4. **AWS GPU: retriever for every record** (`embed_all.py`) → 5th search → rebuild candidates (AWS many-core CPU) → retrain → aims at the 1.5% of true pairs never shortlisted.
-5. Expected by Sunday with all of the above: **0.975–0.98** (estimate); 0.99 would need US/India ≈ 0.99 and France ≈ 0.99, which none of the measured levers reaches alone.
+## 8. Plan 26–27 Sep: closing the 0.0075 gap to 0.990621 (written 26 Sep 15:00)
+
+### 8.1 Where the gap is (arithmetic, LB = 0.85 × US/India + 0.15 × France)
+- The test-like split (tl2) puts v7ens's US/India near **0.9875**. If the LB agrees, France is **(0.983159 − 0.85 × 0.9875) / 0.15 ≈ 0.959**.
+- Reaching 0.9906 then needs, for example, US/India 0.991 **and** France 0.986, or US/India 0.993 and France 0.976. Neither country alone can close it.
+- The split is an estimate. **Upload `submissions/v7ens_frempty` next**: US/India(v7ens) − US/India(v3) = (LB_probe − 0.838) / 0.85, without assumptions; France follows from 0.983159.
+
+### 8.2 What is left on held-out (after the transformer, EXPERIMENTS.md)
+| Loss block | Points | Can we fix it by Sunday? |
+|---|---|---|
+| true record never in stage-1 top 2 | 0.0068 | 60% are records without address whose name is shared by several S1 rows (no method can pick the right one); the rest needs a new retrieval + full rebuild (≥ 8 h CPU): **no** |
+| right S1 found, rejected | 0.0026 | yes, with a better transformer |
+| wrong S1 chosen | 0.0011 | yes, with a better transformer |
+| wrong records merged | 0.0014 | yes, with a better transformer |
+
+### 8.3 Runs now
+1. **Friend's RTX 4060 (8 GB), `docs/FRIEND_RUN.md`:** 3 transformer models (multilingual-e5-base), each trained on 2/3 of all labelled close calls incl. stage-1 ranks 3–5 (1.68M pairs, 2× the old half), scoring every close call out-of-fold and all test close calls. `ce_folds.py`, ~8–9 h. Inputs: `work/bundle_ce_x.zip` (329 MB). Returns 6 score files.
+2. **Kavya's laptop (4 GB):** the same with multilingual-e5-small (`ce_folds.py --name small`, ~6 h, started 14:56). Its held-out result decides whether the 3-fold design beats the 2-halves design before the friend's files arrive.
+3. Then: stage 3 on each family, blend (`blend.py`), France rule (`fr_minrule.py`), `finalize.py`. Upload only if held-out (halves protocol) beats v7ens's 0.98813.
+
+### 8.4 France (15% of the score, likely the larger gap)
+- In use: legal-form veto; transformer may only lower a France probability (its France additions looked like look-alikes: house number differs in 34% of added pairs vs 1.6% of pairs both methods keep).
+- After the probe: if France is the gap, test on the LB the variants already saved (v7b = France additions allowed, v7b_frbase = France without transformer) and a stricter France rule for house-number conflicts (needs street-number parsing that skips "Appartement 22", "etage 4").
+
+### 8.5 Honest expectation
+- Measured levers: the 3-fold transformer design is untested; earlier transformer variants moved held-out by ≤ 0.0001, the first transformer by +0.0065. A realistic Sunday LB is **0.984–0.986**; 0.9906 needs France near 0.99, which no measured result supports yet.
 
 # Appendix A — Problem statement (verbatim, student_resource/README.md)
 

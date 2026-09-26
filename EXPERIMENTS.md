@@ -223,6 +223,16 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 | **v7c** | v6 | as v7b; France: p = min(GBDT p2, stage-3 p) | same | France 861k matched; see audit below |
 | v7sib | v3 (`full_sib`) | A + B | 0.98015 -> 0.98780 | v3 base narrows the gap to v6 base from 0.0014 to 0.0003 |
 
+| v7blend | 0.7 v6 + 0.3 v3 reranked | A + B | 0.98801 (weights 0.5/0.5: 0.98795) | no gain over v7b; not recommended |
+
+**Transformer at test-like density (tl2, `rerank.py check`, side A only, stage 3 fitted on FULL rows of other folds; 26 Sep 05:40):**
+| Base | tl2 GBDT | tl2 + transformer | US | India |
+|---|---|---|---|---|
+| v6 (`full_cons`) | 0.97798 | **0.98747** (+0.0095) | 0.97729 -> 0.98760 | 0.97858 -> 0.98739 |
+| v3 (`full_sib`) | 0.97651 | 0.98724 (+0.0107) | 0.97615 -> 0.98733 | 0.97681 -> 0.98720 |
+- The transformer gains MORE at test density than on FULL (+0.0065), i.e. it handles the extra look-alikes. tl2 tracked the LB for v2/v3 (US/India ~0.976), so US/India LB for v7b/v7c ~0.987 is the expectation.
+- Rejected: France house-number veto. First-number parsing picks apartment/floor numbers ("Appartement 22", "etage 4"); 1.38% of v7c France pairs differ, many plausibly true. Not validated -> not used.
+
 France label-free audit (v7b vs v7b_frbase, 26 Sep 05:20): the transformer changes 42,924 of 259,452 France S1 rows (16.5%; US 0%, by construction). Records it removes: house number differs from S1 20%, name word differs 73% (the known France look-alike pattern). Records it adds: house number differs 34%. Records both keep: 1.6%. So its France removals look right and its additions mostly wrong -> v7c keeps only the removals. The same profile on US/India is not informative (true US/India pairs change house number 16% of the time).
 
 ### Remaining held-out misses of full_cons (eval S1, GBDT expF rule; 26 Sep 03:20)

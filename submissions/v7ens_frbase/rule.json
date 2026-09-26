@@ -1,0 +1,21 @@
+{
+ "note": "blend [['full_cons', 'ce', '_ab'], ['full_cons', 'ce', '_a2']] weights [0.7, 0.30000000000000004] (blend.py); France rows: GBDT p2 of v6's model without transformer, full_cons rule (expF 0.3)",
+ "x": [],
+ "y": [],
+ "decision": {
+  "default": {
+   "type": "expf",
+   "floor": 0.5,
+   "alpha": 1.0,
+   "prob": "p2"
+  },
+  "France": {
+   "type": "expf",
+   "floor": 0.3,
+   "alpha": 1.0,
+   "prob": "p2"
+  }
+ },
+ "base": 0.9880534107284495,
+ "best": 0.9881349962699086
+}

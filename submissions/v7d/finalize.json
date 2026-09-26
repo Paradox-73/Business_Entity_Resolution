@@ -1,0 +1,16 @@
+{
+ "model": "full_cons",
+ "scores": [
+  "E:\\Projects\\Amazon ML Challenge\\work\\ce_x\\test_scores_ce_ab_frmin.parquet"
+ ],
+ "calib": {
+  "default": {
+   "type": "expf",
+   "floor": 0.5,
+   "alpha": 1.0,
+   "prob": "p2"
+  }
+ },
+ "oof_base": 0.9815087766530061,
+ "oof_best": 0.9881116235429451
+}

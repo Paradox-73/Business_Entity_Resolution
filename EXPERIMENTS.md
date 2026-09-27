@@ -427,6 +427,14 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 - Test transformer scoring: 585,295 new pairs in 409,885 records (e5-small ~5 min per fold on the laptop).
 - bge fold 1 (friend 2): AUC 0.99034 vs e5-small 0.98731 on the same 840k held-out close calls; top-1 0.96756 vs 0.96597; test corr with fold 0 0.989.
 
+### bge family and the final US/India build, 27 Sep 09:20-11:00
+
+- bge-reranker-v2-m3, 3 folds (friend 2, A6000, full fine-tune, batch 64, lr 2e-5, ~2.3 h train + 1-1.7 h scoring per fold). Held-out AUC vs e5-small on the same close calls: f0 0.99392 / 0.99121, f1 0.99034 / 0.98731, f2 0.98995 / 0.98676.
+- Stage 3 bge family: **halves 0.98879** (v7ens 0.98813, v7g 0.98845, e5-small 0.98838), all-rescored **0.98951** (v7g 0.98911). Blend e5-small 0.3 + bge 0.7: 0.98878 / 0.98950 (no gain over bge alone; kept for robustness).
+- **v7q** = old candidates + that blend. **v7p** = wide candidates + that blend: vs v7q US/India +15.9k / -6.6k pairs (13.8k with a newly found S1). **v7p_hyb** = v7q except records whose wide best S1 is new (+13.8k / -0.4k). Each with France rows of v7ens and (`_frrest`) of v7m.
+- **Bug caught before upload:** friend 2's `work/test_s{1,2,3}.parquet` were cut-down copies holding only the ids of the old close calls (26 Sep bundle). The first bge scores of the 585k wide-search NEW pairs had empty texts for 257k records / 76k S1 (mean logit -7.5 vs -3.2 on reused pairs) and the first v7p had 107k fewer India matches. Full 3-column test files uploaded (md5 verified), new pairs rescored (mean -2.5, like e5-small's shift), v7p rebuilt. Check before scoring elsewhere: the machine's text files must cover every id of the rows.
+- Queued: e5-large 3 folds on friend 2 (`overnight/e5l_after.sh`, ETA ~18:30-20:00) -> `e5l_final.sh` builds v7r (wide, small+bge+e5l) and v7s (old candidates).
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.

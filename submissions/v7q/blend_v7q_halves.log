@@ -1,0 +1,5 @@
+[   52.3s] weights [0.3, 0.7]: best 0.98878 with {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}
+[   95.9s] weights [0.5, 0.5]: best 0.98871 with {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}
+[  141.1s] weights [0.7, 0.30000000000000004]: best 0.98860 with {"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}
+[  218.6s] BEST blend [0.3, 0.7]: 0.98878 ({"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}); single bases: full_cons 0.98838, full_cons 0.98879
+[  226.1s] wrote test_scores_blend_v7q.parquet (11656208 rows) and ce/rule_blend_v7q.json

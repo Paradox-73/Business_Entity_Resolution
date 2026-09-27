@@ -1,0 +1,7 @@
+{
+ "base": "v10b (public 0.990475)",
+ "france": "+802 France pairs for records v10b leaves unmatched (work/final_sets, src/apply_pair_sets.py): 416 second-generator pairs whose record garbles the S1 word (typos sharing its letters; US/India analog 99.3% true), 298 same-address acronym/noise-name pairs from a new same-address generator (train precision 99.85% on 651 US/India pairs; France estimate ~0.9+ after removing crowded addresses and twins), 88 & -> et/+ pairs",
+ "evidence": "workflow final-upload-hunt: 3 hunts, adversarial verification; safe subsets chosen by the verifiers; expected LB +0.00003..0.00005",
+ "us_india": "unchanged (v10a blend)",
+ "candidates": "cand_union + gathik matched pairs + same-address pairs, 7.07 per S1, official validator PASS (--check-ids)"
+}

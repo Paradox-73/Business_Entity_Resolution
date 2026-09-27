@@ -1,0 +1,7 @@
+{
+ "base": "v10c (v10b 0.990475 + 802 France additions)",
+ "us_india": "LightGBM stacker (15 leaves, 300 rounds, lr 0.05; average of 4 cross-fitted models) on per-pair features of both pipelines (3 family probabilities, blend, gathik p, both GBDT p1/p2, which pipeline scored, rank/margin in record, country, no-address, signed house-number difference, exact name); list-mover overrides after; decide_expf(0.5,1). Held-out +0.000209 vs the v10a blend (halves +0.000216/+0.000202, US +0.000226, India +0.000184; ~13 SE). Test: US +3733/-841, India +3288/-434 pairs",
+ "france": "v10c France - 256 pairs (same generic name and house number, completely different street, both bge families < 0.3; US/India analog 1/87 true)",
+ "expected_lb": "v10b 0.990475 + France ~+0.00005 + US/India ~+0.00015 -> ~0.99067",
+ "candidates": "cand_union + gathik matched pairs + same-address pairs, 7.07 per S1, official validator PASS (--check-ids)"
+}

@@ -2,11 +2,11 @@
 France acceptance, lowercase share and number class."""
 import sys, re
 import polars as pl
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 from ops import words, undot_legal, LEGAL, STOPW
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(45)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
-TMP = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/'
+F = 'C:/ber_scratch/frfix2/fp/'
+TMP = 'C:/ber_scratch/'
 LINK = re.compile(r'(?i)\b(dba|d/b/a|d\.b\.a|doing business as|trading as|t/a|aka|a/k/a|fka|f/k/a|formerly)\b')
 
 

@@ -3,7 +3,7 @@ import polars as pl, re, sys
 sys.path.insert(0, '.')
 from partlow import case_kind
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(320); pl.Config.set_fmt_str_lengths(60); pl.Config.set_float_precision(4)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 d = pl.read_parquet(OUT + 'fr_work.parquet', columns=['q', 's', 'qn', 'sn', 'p2g', 'p3', 'acc9', 'key', 'num2', 'sm'])
 d = d.with_columns(ql=pl.col('qn').str.to_lowercase(), sl=pl.col('sn').str.to_lowercase())
 W = {'dev': r'd[ée]veloppement', 'groupe': r'\bgroupe\b', 'france': r'\bfrance\b', 'services': r'\bservices?\b', 'fils': r'\bfils\b', 'cie': r'\bcie\b', 'associes': r'associ[ée]s', 'and': r'&'}

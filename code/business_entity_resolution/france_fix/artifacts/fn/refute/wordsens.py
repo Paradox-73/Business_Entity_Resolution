@@ -1,10 +1,10 @@
 # per-new-word lowercase sensitivity: decoy lowercase rate among number-changed rejected France records that add the same word,
 # then expected lowercase count of each tier if it were all decoys vs observed
 import polars as pl, sys
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 from ops import words, undot_legal, LEGAL, _match
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(320); pl.Config.set_fmt_str_lengths(60); pl.Config.set_float_precision(4)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 def newwords(qn, sn):
     qx = [w for w in words(undot_legal(qn or '')) if w not in LEGAL]; sx = [w for w in words(undot_legal(sn or '')) if w not in LEGAL]
     used = [False] * len(qx)

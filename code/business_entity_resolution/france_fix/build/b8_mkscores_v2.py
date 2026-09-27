@@ -1,7 +1,7 @@
 """V2 scores: descveto scores + France additions (add_set_v2 filtered) raised to p2 = max(p2, 0.95)."""
 import polars as pl
-BASE = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg/test_scores_frmin_descveto.parquet"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/build/test_scores_frmin_descveto_gnadd.parquet"
+BASE = "C:/ber_scratch/frfix/namechg/test_scores_frmin_descveto.parquet"
+OUT = "C:/ber_scratch/frfix/build/test_scores_frmin_descveto_gnadd.parquet"
 add = pl.read_parquet("add_set_v2.parquet")
 add = add.filter((pl.col("p3") >= 0.01) & (pl.max_horizontal("p3", "p2g") >= 0.1))
 print("add set after score filter:", add.height, add.group_by("cls", "in7m").len().sort("cls", "in7m").to_dicts())

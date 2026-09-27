@@ -1,6 +1,6 @@
 # null model: are twins (record's exact name = another S1 in same city) more frequent than chance?
 import polars as pl, numpy as np
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_width_chars(330)
 top = pl.read_parquet(f"{T}/top_k3.parquet")
 s1 = pl.read_parquet(f"{T}/fr_s1kk.parquet")

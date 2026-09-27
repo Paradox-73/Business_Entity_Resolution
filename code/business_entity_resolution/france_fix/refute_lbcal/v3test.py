@@ -1,5 +1,5 @@
 import sys, os, glob, time
-sys.path.insert(0, "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal")
+sys.path.insert(0, "C:/ber_scratch/frfix/lbcal")
 import numpy as np, polars as pl
 from model import *
 names = [os.path.basename(f)[3:-4] for f in sorted(glob.glob(f"{D}/th_*.npy"))]

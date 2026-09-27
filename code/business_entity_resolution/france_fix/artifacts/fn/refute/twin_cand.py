@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src')
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 import polars as pl
 from common import WORK, id_to_int
 from fr_restore import street

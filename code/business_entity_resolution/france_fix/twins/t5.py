@@ -2,7 +2,7 @@
 import polars as pl, sys, re, unicodedata
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 from fr_restore import street
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 REG = {"hauts de france", "nouvelle aquitaine", "pays de la loire", "nord", "loire atlantique", "gironde", "pas de calais", "france", "vendee", "maine et loire", "sarthe", "mayenne", "somme", "oise", "aisne", "charente", "charente maritime", "dordogne", "landes", "lot et garonne", "pyrenees atlantiques"}
 def nrm(x):
     x = unicodedata.normalize("NFKD", x or "").encode("ascii", "ignore").decode().lower()

@@ -3,7 +3,7 @@ sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolu
 import polars as pl
 from common import WORK, read_truth, id_to_int, log, macro_f05_df
 from pipeline import decide_expf
-exec(open(r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/gap/train_analog.py").read().split("s1 = pl.read_parquet")[0].split("G = os.path")[1].join(["G = os.path", ""]) if False else "")
+exec(open(r"C:/ber_scratch/gap/train_analog.py").read().split("s1 = pl.read_parquet")[0].split("G = os.path")[1].join(["G = os.path", ""]) if False else "")
 G = os.path.join(WORK, "gathik", "v9")
 i64 = lambda d: d.with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
 def held(oof_path, s3_path):
@@ -17,7 +17,7 @@ evs = s1.filter(pl.col("h") < 500).select("s")
 truth = read_truth().select(s=id_to_int("s1_id").cast(pl.Int64), q=id_to_int("q_id").cast(pl.Int64)).join(evs, on="s")
 sm = held(os.path.join(WORK, "models", "full_cons", "oof.parquet"), os.path.join(WORK, "ce_b2", "oof_s3_bgefolds.parquet"))
 po = decide_expf(sm.rename({"p": "p2"}), "p2", 0.5, 1.0).join(evs, on="s")
-a = pl.read_parquet(r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/gap/train_analog.parquet")
+a = pl.read_parquet(r"C:/ber_scratch/gap/train_analog.parquet")
 base = macro_f05_df(po, truth, evs)
 N = evs.height
 for name, sub in [("all", a), ("pg>=0.9", a.filter(pl.col("pg") >= 0.9)),

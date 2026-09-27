@@ -3,8 +3,8 @@ import polars as pl, sys, re, unicodedata
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 from france_cal import toks
 from fr_restore import street
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 pl.Config.set_tbl_rows(60); pl.Config.set_fmt_str_lengths(45); pl.Config.set_tbl_width_chars(330)
 top = pl.read_parquet(f"{T}/top_k3.parquet", columns=["q", "s", "p2", "p2g", "p3", "acc", "pat", "kq", "fq", "qnum", "qst", "qcity", "qn", "qa", "sn", "sa"])
 top = top.with_columns(dk=pl.concat_str([pl.col("kq"), pl.col("fq"), pl.col("qnum").fill_null("-"), pl.col("qst"), pl.col("qcity")], separator="|"))

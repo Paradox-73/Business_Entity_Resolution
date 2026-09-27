@@ -1,5 +1,5 @@
 import polars as pl
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 pl.Config.set_tbl_rows(80); pl.Config.set_fmt_str_lengths(45); pl.Config.set_tbl_width_chars(320)
 top = pl.read_parquet(f"{T}/top_k2.parquet")
 f = top.filter(pl.col("nk").is_in(["swap", "added", "other"]))

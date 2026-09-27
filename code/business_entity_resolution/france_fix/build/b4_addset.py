@@ -2,10 +2,10 @@
 added words of class N (noise) or G (groupe/developpement/france); G only where v7m restored it (g>=0.5, crossed 0.5)."""
 import polars as pl
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(45)
-RD = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_desc"
-NC = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/build"
+RD = "C:/ber_scratch/frfix/refute_desc"
+NC = "C:/ber_scratch/frfix/namechg"
+FR = "C:/ber_scratch/france"
+OUT = "C:/ber_scratch/frfix/build"
 a = pl.read_parquet(f"{RD}/fr_low.parquet").join(pl.read_parquet(f"{NC}/fr_all_cls.parquet", columns=["q", "s", "samestreet", "p2"]), on=["q", "s"], how="left")
 base = (~pl.col("acc") & ~pl.col("veto") & pl.col("kind").is_in(["swap", "added"]) & (pl.col("num") == "nsame") & pl.col("samestreet").fill_null(False))
 addG = a.filter(base & (pl.col("cls") == "G") & pl.col("in7m"))

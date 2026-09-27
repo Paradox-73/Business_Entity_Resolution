@@ -1,7 +1,7 @@
 # variant fpfn: v9b scores + fp veto (1,145 -> p2 0) + fn clean adds minus lowercase and sibling-ambiguous (-> p2 0.95)
 import polars as pl
 W = 'E:/Projects/Amazon ML Challenge/work/'
-B = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/build/'
+B = 'C:/ber_scratch/frfix2/build/'
 F = pl.read_parquet(B + 'fn_clean_flags.parquet')
 add = F.filter(~pl.col('lower') & (pl.col('namb') == 0)).select('q', 's')
 print('fn clean', F.height, 'lowercase', F['lower'].sum(), 'ambiguous', (F['namb'] > 0).sum(), '-> add', add.height)

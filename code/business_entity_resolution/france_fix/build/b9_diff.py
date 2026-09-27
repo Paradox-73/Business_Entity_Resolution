@@ -30,6 +30,6 @@ for v in ("descveto", "descveto_gnadd"):
         if v == "descveto_gnadd":
             ai = a.with_columns(q=id_to_int("q"), s=id_to_int("s"))
             print("   added pairs in the V2 add set:", ai.join(add2, on=["q", "s"]).height, "of", add2.height)
-old = rd("C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg/v7ens_descveto/matching_results.tsv")
+old = rd("C:/ber_scratch/frfix/namechg/v7ens_descveto/matching_results.tsv")
 X = rd(f"{W}/out_descveto_on_v7ens/matching_results.tsv")
 print("V1 build identical to the analyst's spliced file:", X.equals(old))

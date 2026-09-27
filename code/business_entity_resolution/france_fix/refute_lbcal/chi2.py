@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal")
+sys.path.insert(0, "C:/ber_scratch/frfix/lbcal")
 import numpy as np, glob, os
 import model as MD
 from model import *

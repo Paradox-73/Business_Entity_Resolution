@@ -1,6 +1,6 @@
 # twin-excess rate per subset -> label-free false-share estimate, anchored on v7m restore set (LB: ~40% true)
 import polars as pl, numpy as np
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 top = pl.read_parquet(f"{T}/top_k3.parquet")
 s1 = pl.read_parquet(f"{T}/fr_s1kk.parquet")
 keyc = set(zip(s1["ks"].to_list(), s1["scity"].to_list()))

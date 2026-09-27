@@ -1,6 +1,6 @@
 import polars as pl
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+F = r"C:/ber_scratch/france"
+T = r"C:/ber_scratch/frfix/twins"
 pl.Config.set_tbl_rows(100); pl.Config.set_tbl_width_chars(330)
 u = pl.read_parquet(f"{F}/usi_top.parquet", columns=["q", "s", "label", "p", "c", "pat"])
 u = u.with_columns(kc=((pl.col("p") >= 0.9).sum().over("s") - (pl.col("p") >= 0.9).cast(pl.Int64)),

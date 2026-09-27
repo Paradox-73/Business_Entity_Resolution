@@ -7,8 +7,8 @@ import france_cal as fc
 from fr_restore import street
 from common import WORK, id_to_int
 
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
+FR = "C:/ber_scratch/france"
+OUT = "C:/ber_scratch/frfix/namechg"
 
 f = pl.read_parquet(f"{FR}/fr_top.parquet", columns=["q", "s", "p2", "p2g", "qn", "qa", "sn", "sa", "pat", "acc", "s_2", "p2_2", "sn_2"])
 print("fr_top", f.height)

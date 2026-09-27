@@ -4,7 +4,7 @@ import numpy as np, polars as pl
 from sklearn.linear_model import LogisticRegression
 from scipy.optimize import brentq
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_width_chars(200)
-u = pl.read_parquet("C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france/usi_top.parquet", columns=["label", "p3", "p2g", "p", "pat", "country"])
+u = pl.read_parquet("C:/ber_scratch/france/usi_top.parquet", columns=["label", "p3", "p2g", "p", "pat", "country"])
 u = u.with_columns(nk=pl.col("pat").str.split("|").list.get(0), num=pl.col("pat").str.split("|").list.get(1))
 print("US/India rows", u.height, "p3==p2g share", (u["p3"] == u["p2g"]).mean())
 def lg(x): x = np.clip(np.asarray(x, float), 1e-4, 1 - 1e-4); return np.log(x / (1 - x))
@@ -26,7 +26,7 @@ print("calibration of US fit by p3 bin (US/India rescored):")
 print(ur.with_columns(bin=pl.col("p3").cut([0.2, 0.5, 0.77, 0.9, 0.96, 0.99])).group_by("bin").agg(n=pl.len(), y=pl.col("label").mean(), uhat=pl.col("uhat").mean(), p3=pl.col("p3").mean(), g=pl.col("g").mean()).sort("bin"))
 print("US/India pairs like the removals (p3 0.77-0.96, g>=0.8) by pattern:")
 print(ur.filter(pl.col("p3").is_between(0.77, 0.96) & (pl.col("g") >= 0.8)).group_by("pat").agg(n=pl.len(), y=pl.col("label").mean(), p3=pl.col("p3").mean(), g=pl.col("g").mean(), p=pl.col("p").mean()).sort("n", descending=True).head(10))
-bb = pl.read_parquet("C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_lbcal/bb.parquet")
+bb = pl.read_parquet("C:/ber_scratch/frfix/refute_lbcal/bb.parquet")
 bb = bb.with_columns(uhat=lr.predict_proba(X(bb))[:, 1])
 LBt = {"mA": 0.403, "iA": 0.557, "jA": 0.101}
 def shift_for(z, t): return brentq(lambda d: (1 / (1 + np.exp(-(z + d)))).mean() - t, -15, 15)
@@ -46,4 +46,4 @@ for gname, s in res.items():
     for dF in [-0.002, -0.001, 0.0]:
         tr = 0.768 - (dF / 1.156e-6 - ga.height * (ta - 0.768)) / 18250
         print(f"  gn LB {dF:+.3f}, gnA true {ta:.3f} ({gname} shift) -> gnR mean true {tr:.3f}")
-bb.select("uhat").write_parquet("C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_lbcal/uhat.parquet")
+bb.select("uhat").write_parquet("C:/ber_scratch/frfix/refute_lbcal/uhat.parquet")

@@ -42,4 +42,4 @@ a = a.with_columns(nm=pl.col("ops").str.extract_all(r"n_[a-z_]+(?::[a-z]+)?").li
 pl.Config.set_tbl_rows(40); pl.Config.set_fmt_str_lengths(60)
 log(str(a.group_by("nm").agg(n=pl.len(), prec=pl.col("y").mean(), low=pl.col("low").mean()).sort("n", descending=True).head(25)))
 log(str(a.group_by("num").agg(n=pl.len(), prec=pl.col("y").mean()).sort("n", descending=True)))
-a.write_parquet(r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/gap/train_analog.parquet")
+a.write_parquet(r"C:/ber_scratch/gap/train_analog.parquet")

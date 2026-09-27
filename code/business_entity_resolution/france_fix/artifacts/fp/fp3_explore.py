@@ -1,6 +1,6 @@
 import polars as pl
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(60)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
+F = 'C:/ber_scratch/frfix2/fp/'
 u = pl.read_parquet(F + 'usi_sig.parquet')
 fr = pl.read_parquet(F + 'fr_sig.parquet', columns=['q', 's', 'p2', 'acc', 'acc9', 'veto', 'gadd', 'numc', 'low', 'base', 'nchg', 'bsig'])
 

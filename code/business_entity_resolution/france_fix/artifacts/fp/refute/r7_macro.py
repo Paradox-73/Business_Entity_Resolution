@@ -4,11 +4,11 @@ import os, sys
 sys.path.insert(0, "E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl
 from common import WORK, id_to_int, read_truth
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
+F = 'C:/ber_scratch/frfix2/fp/'
 R = F + 'refute/'
 tr = read_truth().select(s=id_to_int('s1_id'), q=id_to_int('q_id'))
 nt = tr.group_by('s').len('nt')
-u = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france/usi_top.parquet', columns=['q', 's', 'label', 'p', 'country'])
+u = pl.read_parquet('C:/ber_scratch/france/usi_top.parquet', columns=['q', 's', 'label', 'p', 'country'])
 sig = pl.read_parquet(F + 'usi_sig.parquet', columns=['q', 'grp', 'base', 'numc'])
 u = u.join(sig, on='q').join(nt, on='s', how='left').with_columns(pl.col('nt').fill_null(0))
 # accepted-set k per s in US/India (p >= .5 best candidates) approximates the decision

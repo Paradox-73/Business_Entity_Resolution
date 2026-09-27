@@ -5,9 +5,9 @@ import sys, re
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl
 pl.Config.set_tbl_rows(100); pl.Config.set_tbl_width_chars(250)
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-NC = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_desc"
+FR = "C:/ber_scratch/france"
+NC = "C:/ber_scratch/frfix/namechg"
+OUT = "C:/ber_scratch/frfix/refute_desc"
 t = pl.read_parquet(f"{FR}/fr_top.parquet", columns=["q", "s", "qn", "qa", "sn", "sa"])
 a = pl.read_parquet(f"{NC}/fr_all_cls.parquet", columns=["q", "s", "p3", "p2g", "acc", "in7m", "cls", "pat", "num"])
 v = pl.read_parquet(f"{NC}/veto_set.parquet", columns=["q", "s"]).with_columns(veto=pl.lit(True))

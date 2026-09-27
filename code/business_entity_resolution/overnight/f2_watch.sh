@@ -2,7 +2,7 @@
 # Waits for bge folds 1 and 2 on friend 2's machine ("OK score fold k" in ce_folds_bge.log) and downloads
 # train_ce_bgef{k}/test_ce_bgef{k} into work/ce_x. Log: work/f2_watch.log. Detached so the low-memory reaper can't stop it.
 set -u
-F2="/c/Users/kanav/.claude/jobs/ef6f152d/tmp/f2"; X="E:/Projects/Amazon ML Challenge/work/ce_x"
+F2="/c/ber_scratch/f2"; X="E:/Projects/Amazon ML Challenge/work/ce_x"
 L="/e/Projects/Amazon ML Challenge/work/f2_watch.log"; RD=/home/bhavya/Business_Entity_Resolution/work
 log() { echo "$(date '+%H:%M:%S') $*" >> "$L"; }
 cd "$F2"

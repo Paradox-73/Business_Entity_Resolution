@@ -3,7 +3,7 @@ import sys; sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_en
 import itertools
 import polars as pl
 from common import WORK, id_to_int
-R = 'E:/Projects/Amazon ML Challenge/'; W = R + 'work/frfix2/'; B = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/build/'
+R = 'E:/Projects/Amazon ML Challenge/'; W = R + 'work/frfix2/'; B = 'C:/ber_scratch/frfix2/build/'
 s1 = pl.read_parquet(f'{WORK}/test_s1.parquet', columns=['entity_id', 'country']).filter(pl.col('country') == 'France')
 NS1 = s1.height
 def pairs(p):

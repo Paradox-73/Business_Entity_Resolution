@@ -8,7 +8,7 @@ from common import WORK, id_to_int, log, read_tsv
 from ops import ops
 
 R = os.path.dirname(WORK)
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/gap"
+T = r"C:/ber_scratch/gap"
 
 
 def pairs(p):

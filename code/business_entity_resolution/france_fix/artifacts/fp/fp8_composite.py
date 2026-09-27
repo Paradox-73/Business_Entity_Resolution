@@ -3,11 +3,11 @@ so the inner text should equal the S1 name squashed. Inner mismatch = a second c
 Validate on US/India labels, then count France accepted pairs with inner mismatch."""
 import sys, re, unicodedata
 import polars as pl
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 from ops import LEGAL, NOISE, TITLE, STOPW
 pl.Config.set_tbl_rows(60); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(45)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
-T = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/'
+F = 'C:/ber_scratch/frfix2/fp/'
+T = 'C:/ber_scratch/'
 DOM = re.compile(r'(?i)\.(com|net|org|fr|in|co|io|biz|info)(\.[a-z]{2})?\s*$')
 
 

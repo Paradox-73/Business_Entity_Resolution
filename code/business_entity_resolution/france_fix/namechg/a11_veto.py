@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl, numpy as np
 pl.Config.set_tbl_rows(60); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(40)
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"; FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+OUT = "C:/ber_scratch/frfix/namechg"; FR = "C:/ber_scratch/france"
 a = pl.read_parquet(f"{OUT}/fr_all_cls.parquet")
 oth = pl.read_parquet(f"{OUT}/fr_oth.parquet")   # descriptor-S1 restricted stat is in a8; recompute here on all S1
 a = a.with_columns(sameacc=((pl.col("cls") == "samename") & pl.col("acc")))

@@ -3,7 +3,7 @@ the LB with the v7g_num France value at -0.0022 +- 0.0010 (refuter's value) and 
 import numpy as np, time
 from scipy.optimize import least_squares
 exec(open("b10_classmodel.py").read().split("th_full = np.load")[0])
-th_full = np.load("C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal/th_full.npy")
+th_full = np.load("C:/ber_scratch/frfix/lbcal/th_full.npy")
 def pfun2(th):
     p = pi_of(th[:9]); pD, pGN = 1 / (1 + np.exp(-th[9])), 1 / (1 + np.exp(-th[10]))
     p = np.where(Dgrp, pD, np.where(GNgrp, pGN, p))

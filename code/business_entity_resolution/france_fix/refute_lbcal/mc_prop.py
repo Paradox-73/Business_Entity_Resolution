@@ -1,6 +1,6 @@
 # Monte Carlo check of the expected-F formula for the PROPOSAL masks (analyst checked only versions)
 import sys
-sys.path.insert(0, "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal")
+sys.path.insert(0, "C:/ber_scratch/frfix/lbcal")
 import numpy as np, time
 from model import *
 th = np.load(f"{D}/th_{sys.argv[1]}.npy")

@@ -1,6 +1,6 @@
 import polars as pl
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 pl.Config.set_tbl_rows(60); pl.Config.set_fmt_str_lengths(40); pl.Config.set_tbl_width_chars(300)
 t = pl.read_parquet(f"{T}/twin_addr.parquet")
 rank = {"same": 0, "added": 1, "dropped": 1, "squashed": 2, "acronym": 2, "swap": 3, "other": 5, "empty": 5}

@@ -1,7 +1,7 @@
 import polars as pl, os, sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 from common import WORK
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 pl.Config.set_tbl_rows(80); pl.Config.set_fmt_str_lengths(45); pl.Config.set_tbl_width_chars(320)
 u = pl.read_parquet(f"{T}/us_top_k.parquet")
 e = u.filter(pl.col("nx_city") > 0)

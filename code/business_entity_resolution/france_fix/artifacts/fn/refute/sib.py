@@ -1,12 +1,12 @@
 # sibling S1 rows at the same address key that could equally be the record's parent (one-word swap/add away from the record)
 import sys
 sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src')
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 import polars as pl
 from common import WORK, id_to_int
 from ops import words, undot_legal, LEGAL, _match
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(300); pl.Config.set_fmt_str_lengths(50); pl.Config.set_float_precision(3)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 ak = pl.read_parquet(OUT + 'akey_test.parquet')
 s1 = pl.read_parquet(f'{WORK}/test_s1.parquet', columns=['entity_id', 'business_name', 'country']).filter(pl.col('country') == 'France').select(s=id_to_int('entity_id'), name='business_name')
 ak = ak.join(s1, on='s')

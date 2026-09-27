@@ -2,7 +2,7 @@
 import polars as pl, numpy as np
 from math import comb
 NS1 = 259452
-g = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/sim_added_c.parquet')
+g = pl.read_parquet('C:/ber_scratch/frfix2/fn/sim_added_c.parquet')
 print(g.height, g.columns, g['c'].describe())
 per = g.group_by('s').agg(k=pl.col('c').first(), m=pl.len(), tiers=pl.col('tier'))
 print('S1 touched', per.height, 'm dist', per['m'].value_counts().sort('m').head(5).to_dicts())

@@ -1,7 +1,7 @@
 """US/India label check of the veto signatures: LEGAL_ADD with number UP 1-20, and word change + UP."""
 import polars as pl
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(40)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
+F = 'C:/ber_scratch/frfix2/fp/'
 u = pl.read_parquet(F + 'usi_sig.parquet')
 nm = pl.col('base').str.split('+')
 hasLA = nm.list.contains('LEGAL_ADD')

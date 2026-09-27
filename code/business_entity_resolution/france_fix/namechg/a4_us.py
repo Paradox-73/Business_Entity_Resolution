@@ -5,8 +5,8 @@ import polars as pl
 from rapidfuzz import fuzz
 import france_cal as fc
 pl.Config.set_tbl_rows(150); pl.Config.set_tbl_width_chars(250)
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
+FR = "C:/ber_scratch/france"
+OUT = "C:/ber_scratch/frfix/namechg"
 u = pl.read_parquet(f"{FR}/usi_top.parquet", columns=["q", "s", "label", "p", "p3", "p2g", "qn", "sn", "pat", "country"])
 u = u.with_columns(nk=pl.col("pat").str.split("|").list.first(), num=pl.col("pat").str.split("|").list.last())
 u = u.filter(pl.col("nk").is_in(["swap", "added", "dropped", "other"]))

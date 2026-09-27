@@ -1,12 +1,12 @@
 # Build the France missed-true add set (v9b-rejected best candidates with true-like census signatures) and the scores file.
 import sys, re
 sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src')
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 import polars as pl
 from ops import words, undot_legal, LEGAL
 from rapidfuzz import fuzz
 pl.Config.set_tbl_rows(60); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(300); pl.Config.set_fmt_str_lengths(48); pl.Config.set_float_precision(4)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 d = pl.read_parquet(OUT + 'fr_work.parquet').join(pl.read_parquet(OUT + 'fr_base.parquet', columns=['q', 's', 'p9best', 's9best']), on=['q', 's'])
 r = d.filter(~pl.col('acc9'))
 nsame = (pl.col('num2') == 'NSAME') & (pl.col('sm') == 'st')

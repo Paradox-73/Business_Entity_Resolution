@@ -1,6 +1,6 @@
 import polars as pl
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 pl.Config.set_tbl_rows(80); pl.Config.set_fmt_str_lengths(48); pl.Config.set_tbl_width_chars(330)
 bt = pl.read_parquet(f"{T}/second_better.parquet")
 ft = pl.read_parquet(f"{F}/fr_top.parquet", columns=["q", "sn_2", "sa_2"])

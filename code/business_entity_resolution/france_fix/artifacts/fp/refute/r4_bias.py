@@ -3,7 +3,7 @@ and of France tier-A-signature pairs by p2 bin. If accepted decoys were lowercas
 the tier-A lowercase test would overstate the fake share."""
 import polars as pl
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_width_chars(250)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
+F = 'C:/ber_scratch/frfix2/fp/'
 u = pl.read_parquet(F + 'usi_sig.parquet', columns=['q', 'grp', 'country', 'p', 'base', 'numc', 'low', 'nchg'])
 fr = pl.read_parquet(F + 'fr_sig.parquet', columns=['q', 's', 'p2', 'acc9', 'veto', 'gadd', 'numc', 'low', 'base', 'nchg'])
 v9 = pl.read_parquet(F + 'fr_scores_v9b_lv.parquet', columns=['q', 's', 'p2']).rename({'p2': 'p9'})

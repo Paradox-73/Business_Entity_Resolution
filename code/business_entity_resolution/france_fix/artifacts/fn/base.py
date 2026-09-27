@@ -16,10 +16,10 @@ with open('E:/Projects/Amazon ML Challenge/submissions/v9b/matching_results.tsv'
                 rows.append((a, x))
 acc = pl.DataFrame(rows, schema=['s1', 'q1'], orient='row').select(s=id_to_int('s1'), q=id_to_int('q1'))
 print('v9b France accepted pairs', acc.height, 'records', acc['q'].n_unique())
-acc.write_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/v9b_fr_acc.parquet')
-d = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france/fr_top.parquet',
+acc.write_parquet('C:/ber_scratch/frfix2/fn/v9b_fr_acc.parquet')
+d = pl.read_parquet('C:/ber_scratch/france/fr_top.parquet',
                     columns=['q', 's', 'p2', 'p1', 'p2g', 'qn', 'qa', 'sn', 'sa', 'pat', 's_2', 'p2_2', 'sn_2', 'sa_2', 'acc'])
-o = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census/fr_ops.parquet', columns=['q', 's', 'ops', 'nc', 'num'])
+o = pl.read_parquet('C:/ber_scratch/frfix2/census/fr_ops.parquet', columns=['q', 's', 'ops', 'nc', 'num'])
 d = d.join(o, on=['q', 's'], how='left')
 # v9b score of the pair
 sc = pl.read_parquet(f'{WORK}/frfix/test_scores_frmin_descveto_gnadd.parquet', columns=['q', 's', 'p2']).rename({'p2': 'p9'})
@@ -36,6 +36,6 @@ d = d.join(acc.with_columns(acc9=pl.lit(True)), on=['q', 's'], how='left').with_
 qa9 = acc.group_by('q').agg(s9acc=pl.col('s').first())
 d = d.join(qa9, on='q', how='left').with_columns(q_acc_else=pl.col('s9acc').is_not_null() & ~pl.col('acc9'))
 d = d.with_columns(sig=pl.col('nc').list.join('+') + '|' + pl.col('num'))
-d.write_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/fr_base.parquet')
+d.write_parquet('C:/ber_scratch/frfix2/fn/fr_base.parquet')
 print(d.height, 'acc9', d['acc9'].sum(), 'q_acc_else', d['q_acc_else'].sum(), 'v7ens acc', d['acc'].sum(), 'sec', round(time.time() - t))
 print('accepted v9b pairs not in fr_top:', acc.join(d.select('q', 's'), on=['q', 's'], how='anti').height)

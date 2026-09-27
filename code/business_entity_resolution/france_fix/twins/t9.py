@@ -1,7 +1,7 @@
 import polars as pl, sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 from france_cal import toks
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 pl.Config.set_tbl_rows(80); pl.Config.set_fmt_str_lengths(40); pl.Config.set_tbl_width_chars(300)
 top = pl.read_parquet(f"{T}/top_k.parquet").with_columns(nk=pl.col("pat").str.split("|").list.first(), num=pl.col("pat").str.split("|").list.last(),
        rest=(pl.col("pr") >= 0.5) & (pl.col("p2") < 0.5))

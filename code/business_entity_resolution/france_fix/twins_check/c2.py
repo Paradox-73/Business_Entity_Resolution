@@ -1,6 +1,6 @@
 import polars as pl
 pl.Config.set_tbl_rows(40); pl.Config.set_fmt_str_lengths(80); pl.Config.set_tbl_width_chars(250)
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 s1 = pl.read_parquet(f"{T}/fr_s1k.parquet")
 print(s1.select("sa", "scity", "snum", "sst").sample(15, seed=4))
 print("S1 city empty:", (s1["scity"] == "").mean(), " distinct cities:", s1["scity"].n_unique())

@@ -3,7 +3,7 @@ sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolut
 import polars as pl
 from common import WORK, id_to_int
 from pipeline import decide_expf
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 A = pl.read_parquet(OUT + 'fn_add_all.parquet').filter(pl.col('tier').str.starts_with('A'))
 add = A.select('q', 's').with_columns(add=pl.lit(True))
 add.write_parquet('E:/Projects/Amazon ML Challenge/work/frfix2/fn_add_set.parquet')

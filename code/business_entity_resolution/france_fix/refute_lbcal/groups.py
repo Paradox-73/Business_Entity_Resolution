@@ -1,5 +1,5 @@
 import sys, os
-sys.path.insert(0, "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal")
+sys.path.insert(0, "C:/ber_scratch/frfix/lbcal")
 import numpy as np, polars as pl
 from model import *
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_width_chars(200)
@@ -15,4 +15,4 @@ print("== p3 distribution of removals vs all accepted")
 for lab, f in [("rem", pl.col("rem")), ("ens", pl.col("ens")), ("gnR", pl.col("gnR")), ("mA", pl.col("mA")), ("iA", pl.col("iA")), ("jA", pl.col("jA"))]:
     d = bb.filter(f)
     print(lab, d.height, "p3 q10/50/90", [round(d["p3"].quantile(x), 3) for x in (0.1, 0.5, 0.9)], "g q10/50/90", [round(d["g"].quantile(x), 3) for x in (0.1, 0.5, 0.9)], "pi", round(d["pi"].mean(), 3), "p3==g share", round((d["p3"] == d["g"]).mean(), 3))
-bb.write_parquet("C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_lbcal/bb.parquet")
+bb.write_parquet("C:/ber_scratch/frfix/refute_lbcal/bb.parquet")

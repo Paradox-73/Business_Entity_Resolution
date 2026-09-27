@@ -15,7 +15,7 @@ def work(rows):
 
 if __name__ == '__main__':
     t = time.time()
-    d = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france/fr_top.parquet', columns=['q', 's', 'p2', 'p2g', 'qn', 'qa', 'sn', 'sa', 'acc'])
+    d = pl.read_parquet('C:/ber_scratch/france/fr_top.parquet', columns=['q', 's', 'p2', 'p2g', 'qn', 'qa', 'sn', 'sa', 'acc'])
     rows = list(zip(d['qn'].to_list(), d['qa'].to_list(), d['sn'].to_list(), d['sa'].to_list()))
     ch = [rows[i:i + 5000] for i in range(0, len(rows), 5000)]
     with Pool(9) as p:

@@ -4,8 +4,8 @@ sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolu
 import polars as pl
 import france_cal as fc
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_width_chars(250)
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
+FR = "C:/ber_scratch/france"
+OUT = "C:/ber_scratch/frfix/namechg"
 
 
 def key(x):

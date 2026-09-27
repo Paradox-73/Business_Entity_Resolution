@@ -1,7 +1,7 @@
 import polars as pl, numpy as np
 pl.Config.set_tbl_rows(40); pl.Config.set_fmt_str_lengths(60); pl.Config.set_tbl_width_chars(250)
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 top = pl.read_parquet(f"{T}/top_k3.parquet", columns=["q", "s", "p2", "p2g", "p3", "acc", "pat", "kq", "ks", "qcity"])
 s1 = pl.read_parquet(f"{T}/fr_s1kk.parquet")
 keyc = set(zip(s1["ks"].to_list(), s1["scity"].to_list()))

@@ -3,12 +3,12 @@
 #  usabs: logit t = a + b*logit(u_US) + c*|logit g - logit p3| + d*(logit g - logit p3) + ndiff + nmiss
 # argv: family target tsig   (tsig large = unconstrained)
 import sys, os, time
-sys.path.insert(0, "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal")
+sys.path.insert(0, "C:/ber_scratch/frfix/lbcal")
 import numpy as np, polars as pl
 from scipy.optimize import least_squares
 import model as MD
 from model import *
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_lbcal"
+OUT = "C:/ber_scratch/frfix/refute_lbcal"
 ens = M["ens"]; v3 = b["in_v3"].to_numpy()
 cm = np.load(f"{D}/mask_consensus.npy"); cr = np.load(f"{D}/mask_cons_remonly.npy")
 for k, mk in [("v3", v3), ("prop", cm), ("remonly", cr)]:

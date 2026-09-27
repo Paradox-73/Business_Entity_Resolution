@@ -1,4 +1,4 @@
-"""v8 submission build, streamed for a machine whose disk cannot hold full pair-feature files (docs/SERVER_RUN.md).
+"""v8 submission build, streamed for a machine whose disk cannot hold full pair-feature files (docs/runbooks/SERVER_RUN.md).
 
 Run with BER_V8=1 (audited blocking and cleaning, candidates.py / normalize.py) after prep.py and embed.py encode_all.
 Steps (each skips when its output exists, so the command can simply be re-run after a crash):

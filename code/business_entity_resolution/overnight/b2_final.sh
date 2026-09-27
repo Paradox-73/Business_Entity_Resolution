@@ -3,7 +3,7 @@
 # cut-down test files). Download -> sanity check -> stage 3 bge (wide) -> blend small+bge -> France min rule -> finalize
 # -> France from v7ens (v7p) / v7m (v7p_frrest) -> hybrid (v7p_hyb). Log: work/b2_final.log. Detached.
 set -u
-F2="/c/Users/kanav/.claude/jobs/ef6f152d/tmp/f2"; R="/e/Projects/Amazon ML Challenge"; W="$R/work"; WW="$(cygpath -w "$W")"
+F2="/c/ber_scratch/f2"; R="/e/Projects/Amazon ML Challenge"; W="$R/work"; WW="$(cygpath -w "$W")"
 RW=/home/bhavya/Business_Entity_Resolution/work; L="$W/b2_final.log"; export PYTHONIOENCODING=utf8
 log() { echo "$(date '+%H:%M:%S') $*" >> "$L"; }
 f2() { (cd "$F2" && MSYS_NO_PATHCONV=1 python f2.py "$@"); }

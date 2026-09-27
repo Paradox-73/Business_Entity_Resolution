@@ -1,8 +1,8 @@
 import polars as pl, sys, re, unicodedata
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 from france_cal import toks, FR_FORMS
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 pl.Config.set_tbl_rows(80); pl.Config.set_fmt_str_lengths(42); pl.Config.set_tbl_width_chars(330)
 FS = set(FR_FORMS)
 def forms(x):

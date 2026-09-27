@@ -5,7 +5,7 @@ sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolut
 from common import WORK, id_to_int
 from pipeline import decide_expf
 
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
+OUT = 'C:/ber_scratch/frfix2/fp/'
 V9B = os.path.join(WORK, 'frfix', 'test_scores_frmin_descveto_gnadd.parquet')
 FR_FORMS = ["sarl", "sas", "sasu", "sa", "eurl", "sci", "snc", "ei", "eirl", "selarl", "scp", "gie", "earl"]
 

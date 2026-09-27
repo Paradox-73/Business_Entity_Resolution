@@ -6,9 +6,9 @@ import polars as pl, numpy as np
 from rapidfuzz import fuzz
 from fr_restore import street
 pl.Config.set_tbl_rows(100); pl.Config.set_tbl_width_chars(250)
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-NC = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_desc"
+FR = "C:/ber_scratch/france"
+NC = "C:/ber_scratch/frfix/namechg"
+OUT = "C:/ber_scratch/frfix/refute_desc"
 f = pl.read_parquet(f"{OUT}/fr_feat.parquet", columns=["q", "s", "grp", "a_ci", "a_exact"])
 f = f.filter(~pl.col("grp").is_in(["D_ndiff", "G_ndiff", "X_ndiff", "same_ndiff"]))
 t = pl.read_parquet(f"{FR}/fr_top.parquet", columns=["q", "qa", "sa", "pat"]).join(f.select("q"), on="q")

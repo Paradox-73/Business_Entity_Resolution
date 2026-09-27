@@ -1,10 +1,10 @@
 # expected France F0.5 change with sub-group true rates (per touched S1, exact enumeration over its added pairs)
 import polars as pl, itertools, sys
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 NS1 = 259452
-g = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/sim_added_c.parquet')
+g = pl.read_parquet('C:/ber_scratch/frfix2/fn/sim_added_c.parquet')
 dirs = pl.read_parquet('fn_dirs.parquet', columns=['q', 's', 'dir']).join(pl.read_parquet('fn_nw.parquet', columns=['q', 's', 'nw']), on=['q', 's'])
-A = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/fn_add_all.parquet', columns=['q', 's', 'tier', 'qn', 'sn'])
+A = pl.read_parquet('C:/ber_scratch/frfix2/fn/fn_add_all.parquet', columns=['q', 's', 'tier', 'qn', 'sn'])
 A = A.join(dirs, on=['q', 's'], how='left')
 X = ['holding', 'international', 'distribution', 'participations']
 A = A.with_columns(sub=pl.when((pl.col('tier') == 'A1') & pl.col('nw').is_in(X)).then(pl.lit('A1x'))

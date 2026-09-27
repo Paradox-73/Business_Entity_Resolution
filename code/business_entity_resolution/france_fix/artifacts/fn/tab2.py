@@ -1,6 +1,6 @@
 import polars as pl, sys
 pl.Config.set_tbl_rows(120); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(40); pl.Config.set_float_precision(3)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 d = pl.read_parquet(OUT + 'fr_base.parquet', columns=['q', 's', 'p9', 'p2g', 'p3', 'acc9', 'nc', 'num', 'ops', 'p2_2'])
 d = d.join(pl.read_parquet(OUT + 'fr_street.parquet'), on=['q', 's'])
 d = d.with_columns(num2=pl.col('num').str.replace(r'^(UP|DOWN).*', '$1'), lower=pl.col('ops').list.contains('n_lower'),

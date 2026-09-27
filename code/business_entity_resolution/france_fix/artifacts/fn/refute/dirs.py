@@ -1,6 +1,6 @@
 # direction of the swapped word pair (S1 word class -> record word class) for n_swap:noise signatures: US/India true/false vs France tiers
 import sys
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 import polars as pl
 from ops import words, undot_legal, LEGAL, wclass, _match
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(300); pl.Config.set_fmt_str_lengths(60); pl.Config.set_float_precision(4)

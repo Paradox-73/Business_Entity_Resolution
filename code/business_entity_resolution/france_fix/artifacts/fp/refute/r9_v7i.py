@@ -2,7 +2,7 @@
 tier-A veto pairs (3.4% lowercase)? Check transformer p3, GBDT p2g, num detail, examples."""
 import polars as pl
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_width_chars(300); pl.Config.set_fmt_str_lengths(55)
-T = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/'
+T = 'C:/ber_scratch/'
 F = T + 'frfix2/fp/'
 E = pl.read_parquet(T + 'france/pairs_v7ens.parquet')
 V = pl.read_parquet(T + 'france/pairs_v7i.parquet')

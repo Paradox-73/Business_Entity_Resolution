@@ -1,8 +1,8 @@
 """Build per-pair tables: US/India reference (sig_all) and France (fr_ops + v9b acceptance), base signature = name
 changes without LOWER + house-number class; low = record name all-lowercase."""
 import polars as pl
-C = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census/'
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
+C = 'C:/ber_scratch/frfix2/census/'
+F = 'C:/ber_scratch/frfix2/fp/'
 
 
 def numc(col):
@@ -24,8 +24,8 @@ u.write_parquet(F + 'usi_sig.parquet')
 
 fr = pl.read_parquet(C + 'fr_ops.parquet')
 acc = pl.read_parquet(F + 'acc_v9b.parquet', columns=['q', 's', 'p2']).rename({'p2': 'p2v9b'})
-veto = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg/veto_set.parquet', columns=['q', 's'])
-add = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/build/add_set_v2_final.parquet', columns=['q', 's'])
+veto = pl.read_parquet('C:/ber_scratch/frfix/namechg/veto_set.parquet', columns=['q', 's'])
+add = pl.read_parquet('C:/ber_scratch/frfix/build/add_set_v2_final.parquet', columns=['q', 's'])
 fr = (fr.join(acc.with_columns(acc9=pl.lit(True)), on=['q', 's'], how='left')
         .join(veto.with_columns(veto=pl.lit(True)), on=['q', 's'], how='left')
         .join(add.with_columns(gadd=pl.lit(True)), on=['q', 's'], how='left')

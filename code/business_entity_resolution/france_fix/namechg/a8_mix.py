@@ -7,8 +7,8 @@ import polars as pl
 import numpy as np
 import france_cal as fc
 pl.Config.set_tbl_rows(200); pl.Config.set_tbl_width_chars(250)
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+OUT = "C:/ber_scratch/frfix/namechg"
+FR = "C:/ber_scratch/france"
 wc = pl.read_parquet(f"{OUT}/word_class.parquet")
 D = set(wc.filter(pl.col("cls") == "D")["a"].to_list())
 a = pl.read_parquet(f"{OUT}/fr_all_cls.parquet")

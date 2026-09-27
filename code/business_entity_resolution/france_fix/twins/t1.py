@@ -1,7 +1,7 @@
 import os, sys, polars as pl
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 from common import WORK, id_to_int
-OUT = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+OUT = r"C:/ber_scratch/frfix/twins"
 s1 = (pl.scan_parquet(os.path.join(WORK, "test_s1.parquet")).filter(pl.col("country") == "France")
       .select(s=id_to_int("entity_id"), sn="business_name", sa="business_address").collect())
 print("S1", s1.height)

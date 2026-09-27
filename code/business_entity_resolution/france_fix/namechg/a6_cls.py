@@ -3,8 +3,8 @@ import sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl
 pl.Config.set_tbl_rows(200); pl.Config.set_tbl_width_chars(250)
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
+FR = "C:/ber_scratch/france"
+OUT = "C:/ber_scratch/frfix/namechg"
 kw = pl.read_parquet(f"{OUT}/fr_word_keep.parquet")
 df = pl.read_parquet(f"{OUT}/s1_df.parquet")
 kw = kw.join(df.rename({"w": "a"}), on="a", how="left").with_columns(pl.col("df_s1").fill_null(0))

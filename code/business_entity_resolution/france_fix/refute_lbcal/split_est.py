@@ -1,6 +1,6 @@
 import numpy as np, polars as pl
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_width_chars(200)
-D = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_lbcal"
+D = "C:/ber_scratch/frfix/refute_lbcal"
 bb = pl.concat([pl.read_parquet(f"{D}/bb.parquet"), pl.read_parquet(f"{D}/uhat.parquet")], how="horizontal")
 def lg(x): x = np.clip(np.asarray(x, float), 1e-4, 1 - 1e-4); return np.log(x / (1 - x))
 sg = lambda z: 1 / (1 + np.exp(-z))

@@ -1,5 +1,5 @@
 import numpy as np, polars as pl
-D = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_lbcal"
+D = "C:/ber_scratch/frfix/refute_lbcal"
 bb = pl.read_parquet(f"{D}/bb.parquet")
 k = bb.filter("ens").group_by("s").agg(k=pl.len())
 bb = bb.join(k, on="s", how="left").with_columns(pl.col("k").fill_null(0))

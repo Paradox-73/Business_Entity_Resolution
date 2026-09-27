@@ -1,6 +1,6 @@
 import polars as pl
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 top = pl.read_parquet(f"{F}/fr_top.parquet", columns=["q", "s", "p2", "p2g", "acc", "pat", "s_2", "p2_2", "pat_2"])
 b = pl.read_parquet(f"{T}/fr_pairs.parquet", columns=["q", "s", "g"])
 x = top.filter((pl.col("pat") == "swap|nsame") & (pl.col("pat_2") == "same|nsame")).join(b.rename({"s": "s_2", "g": "g2"}), on=["q", "s_2"], how="left")

@@ -3,8 +3,8 @@ sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolu
 import polars as pl
 from common import WORK, id_to_int
 import france_cal as fc
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal"
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+OUT = "C:/ber_scratch/frfix/lbcal"
+FR = "C:/ber_scratch/france"
 t0 = time.time()
 s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).filter(pl.col("country") == "France").select(s=id_to_int("entity_id"))
 def load(f, name):

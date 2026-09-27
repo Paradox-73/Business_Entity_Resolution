@@ -2,14 +2,14 @@
 fixed for descriptor-class (D/X) pairs and noise/groupe-class (N/G) same-address pairs; remaining parameters fitted to the
 France LB numbers. Predicts V1 (descveto) and V2 (descveto + G/N additions). Also leave-v7m-out."""
 import sys
-sys.path.insert(0, "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal")
+sys.path.insert(0, "C:/ber_scratch/frfix/lbcal")
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import numpy as np, polars as pl, time
 from scipy.optimize import least_squares
 import model as MD
 from model import *
 from common import WORK, id_to_int
-NC = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"; W = "E:/Projects/Amazon ML Challenge/work/frfix"
+NC = "C:/ber_scratch/frfix/namechg"; W = "E:/Projects/Amazon ML Challenge/work/frfix"
 keys = b.select("q", "s").with_row_index("i")
 pc = pl.read_parquet(f"{NC}/pair_class.parquet")
 cls = keys.join(pc, on=["q", "s"], how="left").sort("i")["cls"].fill_null("none").to_numpy()
@@ -64,7 +64,7 @@ def resid(th, drop=()):
         r.append(0.0 if k in drop else (o[k] - v) / s)
     r += list((th - TH0) / SIG0)
     return np.array(r)
-th_full = np.load("C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal/th_full.npy")
+th_full = np.load("C:/ber_scratch/frfix/lbcal/th_full.npy")
 def fit(name, drop=()):
     t = time.time()
     res = least_squares(resid, th_full.copy(), diff_step=1e-3, max_nfev=12, ftol=1e-5, xtol=1e-5, kwargs=dict(drop=drop))

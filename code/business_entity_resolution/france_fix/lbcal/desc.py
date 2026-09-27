@@ -1,6 +1,6 @@
 import polars as pl
 pl.Config.set_tbl_rows(60); pl.Config.set_tbl_width_chars(220)
-b = pl.read_parquet("C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal/pairs.parquet")
+b = pl.read_parquet("C:/ber_scratch/frfix/lbcal/pairs.parquet")
 print(b.schema)
 print("rank dist", b["rk"].value_counts().sort("rk"))
 b = b.with_columns(nk=pl.col("pat").str.split("|").list.get(0), num=pl.col("pat").str.split("|").list.get(1))

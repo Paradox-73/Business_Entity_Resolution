@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl
 pl.Config.set_tbl_rows(100); pl.Config.set_tbl_width_chars(250)
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+FR = "C:/ber_scratch/france"
 u = pl.read_parquet(f"{FR}/usi_top.parquet", columns=["q", "s", "label", "p", "qn", "sn", "qa", "sa", "pat", "country"])
 LF = r"(?i)^(inc|llc|ltd|corp|co|pvt|private|limited|llp|plc|the)\b"
 u = u.with_columns(

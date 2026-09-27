@@ -4,7 +4,7 @@ sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolut
 import polars as pl
 from rapidfuzz import fuzz
 from fr_restore import street
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 t = time.time()
 d = pl.read_parquet(OUT + 'fr_base.parquet', columns=['q', 's', 'qa', 'sa', 's_2', 'sa_2'])
 def sm(qa, sa):

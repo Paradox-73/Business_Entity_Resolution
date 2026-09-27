@@ -1,14 +1,14 @@
 # strict sibling ambiguity + lowercase check for the cleaned fn add set
 import sys
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 import polars as pl
 from ops import words, undot_legal, LEGAL, NOISE, STOPW, house, LEET
 from rapidfuzz import fuzz
 def _match(a, b):   # stricter than census _match (75): 'nantes' ~ 'enfants' is 77
     return a == b or (len(a) > 3 and len(b) > 3 and fuzz.ratio(a, b) >= 85) or a.translate(LEET) == b.translate(LEET)
 pl.Config.set_tbl_rows(60); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(300); pl.Config.set_fmt_str_lengths(40)
-FN = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/build/'
+FN = 'C:/ber_scratch/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/build/'
 A = pl.read_parquet(FN + 'fn_add_all.parquet', columns=['q', 's', 'tier', 'lower', 'qn', 'sn', 'qa', 'sa'])
 cl = pl.read_parquet('E:/Projects/Amazon ML Challenge/work/frfix2/fn_add_set_clean.parquet').with_columns(clean=pl.lit(True))
 A = A.join(cl, on=['q', 's'], how='inner')

@@ -5,7 +5,7 @@ from common import WORK, id_to_int
 s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(s=id_to_int("entity_id"), fr=pl.col("country") == "France")
 frs = set(s1.filter("fr")["s"].to_list())
 A = pq.ParquetFile(r"E:/Projects/Amazon ML Challenge/work/ce/test_scores_blend_ab_a2_frmin.parquet")
-B = pq.ParquetFile(r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal/test_scores_frlbcal.parquet")
+B = pq.ParquetFile(r"C:/ber_scratch/frfix/lbcal/test_scores_frlbcal.parquet")
 nd = 0; nd_nonfr = 0; nfr = 0; keymis = 0; p1d = 0; up = 0; down = 0
 chg_s = []
 for i in range(A.num_row_groups):

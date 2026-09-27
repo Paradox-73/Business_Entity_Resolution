@@ -7,8 +7,8 @@ sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolut
 from pipeline import decide_expf
 from fp1_dec import france_scores, V9B
 pl.Config.set_tbl_rows(60); pl.Config.set_tbl_width_chars(260); pl.Config.set_fmt_str_lengths(50)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
-T = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/'
+F = 'C:/ber_scratch/frfix2/fp/'
+T = 'C:/ber_scratch/'
 OUTW = 'E:/Projects/Amazon ML Challenge/work/frfix2/'
 
 fr = pl.read_parquet(F + 'fr_sig.parquet', columns=['q', 's', 'acc9', 'veto', 'num', 'numc', 'low', 'base', 'bsig', 'nchg', 'p2'])

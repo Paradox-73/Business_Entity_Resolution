@@ -4,7 +4,7 @@ sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolut
 import polars as pl
 from common import WORK, id_to_int
 from fr_restore import street
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 def key(a):
     n, st = street(a)
     if n is None:

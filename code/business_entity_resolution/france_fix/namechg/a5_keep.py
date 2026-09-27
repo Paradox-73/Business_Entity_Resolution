@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl
 pl.Config.set_tbl_rows(200); pl.Config.set_tbl_width_chars(250)
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
+OUT = "C:/ber_scratch/frfix/namechg"
 c = pl.read_parquet(f"{OUT}/fr_chg.parquet").drop("qa", "sa", "sn_2")
 c = c.with_columns(num=pl.col("pat").str.split("|").list.last(), nk=pl.col("pat").str.split("|").list.first())
 x = c.filter(pl.col("nk").is_in(["swap", "added"]) & (pl.col("added").list.len() == 1)).with_columns(a=pl.col("added").list.first())

@@ -102,6 +102,6 @@ log(f"FN not in list but in ours only/gathik only: n/a (union used)")
 # oracle: if each S1's predicted set were the best subset of the CANDIDATES (perfect ranking), upper bound
 allfix = gain(pl.concat([fn.filter(pl.col("cat") != "FN not in any list").select("s", "q")]), "fn")
 log(f"bound: all in-list FNs fixed {allfix:.5f}; all FPs removed {gain(fp.select('s', 'q'), 'fp'):.5f}")
-fn.select("s", "q", "cat", "p2", "po", "pg", "bs", "bp", "country", "chain", "q_noaddr").write_parquet(r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/gap/fn.parquet")
-fp.select("s", "q", "cat", "p2", "po", "pg", "ts", "country", "chain", "q_noaddr").write_parquet(r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/gap/fp.parquet")
+fn.select("s", "q", "cat", "p2", "po", "pg", "bs", "bp", "country", "chain", "q_noaddr").write_parquet(r"C:/ber_scratch/gap/fn.parquet")
+fp.select("s", "q", "cat", "p2", "po", "pg", "ts", "country", "chain", "q_noaddr").write_parquet(r"C:/ber_scratch/gap/fp.parquet")
 log("done")

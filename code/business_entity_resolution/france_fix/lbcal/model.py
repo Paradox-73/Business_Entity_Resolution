@@ -1,5 +1,5 @@
 import numpy as np, polars as pl
-D = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal"
+D = "C:/ber_scratch/frfix/lbcal"
 NS1 = 259452
 b = pl.read_parquet(f"{D}/pairs.parquet")
 b = b.with_columns(nk=pl.col("pat").str.split("|").list.get(0), num=pl.col("pat").str.split("|").list.get(1))

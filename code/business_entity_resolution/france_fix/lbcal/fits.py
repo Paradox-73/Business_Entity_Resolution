@@ -1,4 +1,4 @@
-import sys; sys.path.insert(0, "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/lbcal")
+import sys; sys.path.insert(0, "C:/ber_scratch/frfix/lbcal")
 import numpy as np, time, json
 from scipy.optimize import least_squares
 from model import *

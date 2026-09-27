@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src')
 import polars as pl, collections
 from ops import words, undot_legal, LEGAL
@@ -7,7 +7,7 @@ from common import WORK
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(40)
 s1 = pl.read_parquet(f'{WORK}/test_s1.parquet', columns=['business_name', 'country']).filter(pl.col('country') == 'France')['business_name'].to_list()
 cnt = collections.Counter(w for n in s1 for w in set(words(undot_legal(n or ''))))
-A = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/fn_add_all.parquet').filter(pl.col('tier') == 'A4')
+A = pl.read_parquet('C:/ber_scratch/frfix2/fn/fn_add_all.parquet').filter(pl.col('tier') == 'A4')
 def changed(qn, sn):
     q = [w for w in words(undot_legal(qn)) if w not in LEGAL]; s = set(w for w in words(undot_legal(sn)) if w not in LEGAL)
     return [w for w in q if w not in s]

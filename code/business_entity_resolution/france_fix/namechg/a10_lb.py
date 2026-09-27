@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl, numpy as np
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"; FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+OUT = "C:/ber_scratch/frfix/namechg"; FR = "C:/ber_scratch/france"
 a = pl.read_parquet(f"{OUT}/fr_all_cls.parquet")
 a = a.with_columns(sameacc=((pl.col("cls") == "samename") & pl.col("acc")))
 a = a.with_columns(oth=pl.col("sameacc").sum().over("s") - pl.col("sameacc").cast(pl.Int64),

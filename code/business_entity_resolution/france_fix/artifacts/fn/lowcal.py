@@ -2,8 +2,8 @@
 # US/India true (T) and false (D+W) pairs, and the implied true share of France accepted / rejected pairs.
 import polars as pl
 pl.Config.set_tbl_rows(150); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(320); pl.Config.set_fmt_str_lengths(60); pl.Config.set_float_precision(3)
-C = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census/'
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+C = 'C:/ber_scratch/frfix2/census/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 def prep(df):
     return df.with_columns(
         lower=pl.col('ops').list.contains('n_lower'),

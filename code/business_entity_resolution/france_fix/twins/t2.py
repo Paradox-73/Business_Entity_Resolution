@@ -1,6 +1,6 @@
 import polars as pl
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 b = pl.read_parquet(f"{T}/fr_pairs.parquet")
 s1 = pl.read_parquet(f"{T}/fr_s1.parquet")
 acc = pl.read_parquet(f"{F}/pairs_v7ens.parquet").with_columns(a=pl.lit(True))

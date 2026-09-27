@@ -1,10 +1,10 @@
 # second artifact: address ops that separate true/false in US/India (a_chg:place, a_chg:street, a_chg:unit, a_extra_numbers ...), measured on France groups
 import polars as pl
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(320); pl.Config.set_fmt_str_lengths(40); pl.Config.set_float_precision(4)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 d = pl.read_parquet(OUT + 'fr_work.parquet', columns=['q', 's', 'p2g', 'p3', 'acc9', 'key', 'num2', 'sm', 'stw'])
 d = d.join(pl.read_parquet('fr_low_own.parquet'), on=['q', 's'])
-d = d.join(pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census/fr_ops.parquet', columns=['q', 's', 'ops']), on=['q', 's'], how='left')
+d = d.join(pl.read_parquet('C:/ber_scratch/frfix2/census/fr_ops.parquet', columns=['q', 's', 'ops']), on=['q', 's'], how='left')
 A = pl.read_parquet(OUT + 'fn_add_all.parquet', columns=['q', 's', 'tier'])
 d = d.join(A, on=['q', 's'], how='left')
 A1k = ['SWAP|n_swap:noise|NSAME', 'SWAP|n_swap:desc>noise|NSAME']

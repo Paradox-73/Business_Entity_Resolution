@@ -1,12 +1,12 @@
 import polars as pl
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(300); pl.Config.set_fmt_str_lengths(60); pl.Config.set_float_precision(4)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 d = pl.read_parquet(OUT + 'fr_work.parquet', columns=['q', 's', 'qn', 'sn', 'p2g', 'p3', 'p9', 'acc9', 'key', 'num2', 'sm', 'stw', 'p2_2'])
 d = d.join(pl.read_parquet(OUT + 'fr_base.parquet', columns=['q', 's', 'p2', 'acc', 's9acc', 'q_acc_else']), on=['q', 's'])
 # own lowercase: record has letters, record == lower(record), S1 != lower(S1)
 d = d.with_columns(low=(pl.col('qn') == pl.col('qn').str.to_lowercase()) & (pl.col('sn') != pl.col('sn').str.to_lowercase()) & pl.col('qn').str.contains(r'[^\W\d_]'))
-veto = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg/veto_set.parquet', columns=['q', 's']).with_columns(veto=pl.lit(True))
-addv2 = pl.read_parquet('C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/build/add_set_v2_final.parquet', columns=['q', 's']).with_columns(gnadd=pl.lit(True))
+veto = pl.read_parquet('C:/ber_scratch/frfix/namechg/veto_set.parquet', columns=['q', 's']).with_columns(veto=pl.lit(True))
+addv2 = pl.read_parquet('C:/ber_scratch/frfix/build/add_set_v2_final.parquet', columns=['q', 's']).with_columns(gnadd=pl.lit(True))
 d = d.join(veto, on=['q', 's'], how='left').join(addv2, on=['q', 's'], how='left').with_columns(pl.col('veto').fill_null(False), pl.col('gnadd').fill_null(False))
 A1k = ['SWAP|n_swap:noise|NSAME', 'SWAP|n_swap:desc>noise|NSAME']
 x = d.filter(pl.col('key').is_in(A1k) & (pl.col('sm') == 'st'))

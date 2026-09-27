@@ -3,9 +3,9 @@ import sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl, numpy as np
 pl.Config.set_tbl_rows(60); pl.Config.set_tbl_width_chars(250)
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
-NC = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_desc"
+FR = "C:/ber_scratch/france"
+NC = "C:/ber_scratch/frfix/namechg"
+OUT = "C:/ber_scratch/frfix/refute_desc"
 a = pl.read_parquet(f"{OUT}/fr_low.parquet")
 Ld, Lt = 0.0338, 0.0008
 E = pl.read_parquet(f"{FR}/pairs_v7ens.parquet").select("q", "s")

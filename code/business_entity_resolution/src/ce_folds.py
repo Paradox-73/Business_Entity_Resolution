@@ -52,7 +52,7 @@ def main():
             sys.exit(f"missing input {need} (unzip the data bundle into the repo root first)")
     import torch
     if not torch.cuda.is_available():
-        sys.exit("no CUDA GPU visible to torch: install the CUDA build of torch (see docs/FRIEND_RUN.md)")
+        sys.exit("no CUDA GPU visible to torch: install the CUDA build of torch (see docs/runbooks/FRIEND_RUN.md)")
     log(f"GPU {torch.cuda.get_device_name(0)}, {torch.cuda.get_device_properties(0).total_memory / 2**30:.1f} GB; "
         f"model {a.model}; name {a.name}; smoke {a.smoke}")
 

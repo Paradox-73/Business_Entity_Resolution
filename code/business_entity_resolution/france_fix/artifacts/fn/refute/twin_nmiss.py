@@ -1,13 +1,13 @@
 # number-absent tiers: other S1 rows on the same street (any number) whose name explains the record at least as well
 import sys
 sys.path.insert(0, 'E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src')
-sys.path.insert(0, 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/census')
+sys.path.insert(0, 'C:/ber_scratch/frfix2/census')
 import polars as pl
 from common import WORK, id_to_int
 from fr_restore import street
 from ops import words, undot_legal, LEGAL, _match
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(300); pl.Config.set_fmt_str_lengths(50); pl.Config.set_float_precision(3)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 s1 = pl.read_parquet(f'{WORK}/test_s1.parquet', columns=['entity_id', 'business_name', 'business_address', 'country']).filter(pl.col('country') == 'France')
 def skey(a):
     n, st = street(a)

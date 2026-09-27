@@ -4,7 +4,7 @@ import polars as pl
 from rapidfuzz import fuzz
 from fr_restore import street, TYPES
 pl.Config.set_tbl_rows(150); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(320); pl.Config.set_fmt_str_lengths(62); pl.Config.set_float_precision(3)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 d = pl.read_parquet(OUT + 'fr_base.parquet', columns=['q', 's', 'qn', 'sn', 'qa', 'sa', 'p2g', 'p3', 'p9', 'acc9', 'p2_2', 'ops'])
 d = d.join(pl.read_parquet(OUT + 'fr_key2.parquet', columns=['q', 's', 'key', 'bnc', 'wcls', 'num2', 'lower', 'sm']), on=['q', 's'])
 d = d.join(pl.read_parquet(OUT + 'fr_street.parquet', columns=['q', 's', 'sm2']), on=['q', 's'])

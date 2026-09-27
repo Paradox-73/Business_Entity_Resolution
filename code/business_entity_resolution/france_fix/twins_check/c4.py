@@ -1,7 +1,7 @@
 import polars as pl, numpy as np, random
 from collections import defaultdict
 pl.Config.set_tbl_rows(40); pl.Config.set_fmt_str_lengths(60); pl.Config.set_tbl_width_chars(250)
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 top = pl.read_parquet(f"{T}/top_k3.parquet", columns=["q", "s", "p2", "p2g", "p3", "pr", "acc", "pat", "kq", "ks", "qcity", "qcity_right"])
 print("qcity == qcity_right:", (top["qcity"] == top["qcity_right"]).mean())
 s1 = pl.read_parquet(f"{T}/fr_s1kk.parquet")

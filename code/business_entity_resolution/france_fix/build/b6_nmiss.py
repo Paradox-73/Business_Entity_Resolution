@@ -1,6 +1,6 @@
 import polars as pl
 pl.Config.set_tbl_rows(40); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(40)
-RD = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/refute_desc"; NC = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"; FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+RD = "C:/ber_scratch/frfix/refute_desc"; NC = "C:/ber_scratch/frfix/namechg"; FR = "C:/ber_scratch/france"
 a = pl.read_parquet(f"{RD}/fr_low.parquet").join(pl.read_parquet(f"{NC}/fr_all_cls.parquet", columns=["q", "s", "samestreet"]), on=["q", "s"], how="left")
 Ld, Lt = 0.0338, 0.0008
 x = a.filter(~pl.col("acc") & pl.col("kind").is_in(["swap", "added"]) & (pl.col("num") == "nmiss") & pl.col("cls").is_in(["N", "G", "rare"]))

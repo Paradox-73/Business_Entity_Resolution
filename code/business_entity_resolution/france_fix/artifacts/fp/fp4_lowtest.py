@@ -2,7 +2,7 @@
 among accepted-like pairs (p >= 0.5), and France accepted (v9b, not vetoed) count + lowercase share -> fake estimate."""
 import polars as pl
 pl.Config.set_tbl_rows(120); pl.Config.set_tbl_width_chars(260); pl.Config.set_fmt_str_lengths(50)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
+F = 'C:/ber_scratch/frfix2/fp/'
 u = pl.read_parquet(F + 'usi_sig.parquet')
 fr = pl.read_parquet(F + 'fr_sig.parquet', columns=['q', 's', 'p2', 'acc', 'acc9', 'veto', 'gadd', 'numc', 'low', 'base', 'nchg', 'bsig'])
 

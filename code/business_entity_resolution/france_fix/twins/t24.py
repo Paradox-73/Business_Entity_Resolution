@@ -1,7 +1,7 @@
 # twin with SAME house number (different street) in same city: observed vs synthetic
 import polars as pl, numpy as np
 from collections import Counter
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
+T = r"C:/ber_scratch/frfix/twins"
 top = pl.read_parquet(f"{T}/top_k3.parquet")
 s1 = pl.read_parquet(f"{T}/fr_s1kk.parquet")
 keyn = set(zip(s1["ks"].to_list(), s1["scity"].to_list(), s1["snum"].fill_null("-").to_list()))

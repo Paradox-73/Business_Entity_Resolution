@@ -438,6 +438,23 @@ Pipeline (`BER_V8=1`): audited blocking + cleaning -> stage-1 GBDT (XGBoost dept
 
 Test file (`submissions/v9`): expF 0.5 (chosen on held-out), France min rule (197,140 France pairs lowered back to the GBDT p) + legal-form veto (4,857 pairs with p2 >= 0.3); matched France 853,628 / India 2,748,510 / US 2,255,299; 1,632,885 S1 rows; server check PASS. **+0.0030 over v7ens on the same protocol; US/India change is validated, France uses the team's validated rules.**
 
+### e5-large as a third cross-encoder family (27 Sep 19:04 IST; `work/e5l_final2.log`)
+
+3 fold models of intfloat/multilingual-e5-large (full fine-tuning, batch 64, lr 2e-5, 1 epoch; folds 0-1 on friend 2's A6000, fold 2 on the lab server, whose out-of-memory killer stopped fold-2 scoring once; it resumed from saved parts). Held-out AUC on each fold's out-of-fold rows: 0.98926 / 0.98952 / 0.98922 (bge 0.99022 / 0.99034 / 0.98995; e5-small 0.98723 / 0.98731 / 0.98676); correlation with bge 0.994.
+
+| held-out macro F0.5, all close calls rescored | score |
+| --- | --- |
+| e5-large family alone | 0.98924 |
+| v7p: e5-small 0.3 + bge 0.7 | 0.98950 |
+| v7r: e5-small + bge + e5-large, equal | 0.98946 |
+| v7r2: bge 0.7 + e5-large 0.3 (rule thr 0.7) | 0.98954 |
+
+**Decision:** not used. +0.00004 at best, chosen on the same held-out rows, and about +0.00002 after the 0.6/0.4 blend with the second pipeline.
+
+### France recall from the second generator (27 Sep 18:40 IST; v10b)
+
+Held-out loss of the v10a-like blend (0.99205, `france_fix/recall/decomp.py`): 0.0080 in total; records without an address 0.0060 of it (not in any list 0.00285, best S1 another 0.00158, rejected 0.00153). Gathik v9's France matches outside our France lists, for records v10a leaves unmatched: 7,266. The same kind of pair on US/India labels (eval half): 28,113 pairs, 98.4% true; without word-level name change, legal-form change/addition or house number moved up: 98.8% true, +0.098 row-F each. France keeps 4,825 (gathik p >= 0.8); 0 of the non-domain names are all-lowercase. Expected France +0.0018, LB +0.00027. Built as v10b (`src/france_recall.py`).
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.

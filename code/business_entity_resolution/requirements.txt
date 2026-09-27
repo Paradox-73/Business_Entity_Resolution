@@ -1,10 +1,40 @@
+# Python 3.12.10. Versions below are the ones installed on the laptop that ran the main pipeline
+# (Windows 11, Intel i5-12450H, 16 GB RAM, NVIDIA RTX 3050 Laptop 4 GB, driver 511.65 / CUDA 11.6),
+# read with `python -m pip freeze` on 27 Sep 2026.
+
+# PyTorch CUDA 11.8 build (the laptop driver supports CUDA 11.x only)
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.7.1+cu118
+
+# data handling
 polars==1.44.2
+pyarrow==25.0.1
 numpy==2.5.3
 scipy==1.18.1
+
+# blocking and pair features
 scikit-learn==1.9.1
-lightgbm==4.7.0
-rapidfuzz==3.14.6
 sparse_dot_topn==1.2.0
-pyarrow==25.0.1
-torch==2.7.1
+rapidfuzz==3.14.6
+
+# gradient-boosted trees
+lightgbm==4.7.0
+# 2.0.3 is kept on purpose: it is the last XGBoost release whose GPU build runs on CUDA 11 drivers
+xgboost==2.0.3
+
+# transformers (multilingual-e5 embeddings and cross-encoders)
 transformers==5.17.0
+tokenizers==0.23.2
+safetensors==0.8.0
+huggingface_hub==1.32.0
+protobuf==7.36.2
+
+# Other machines (versions as recorded in the runbooks; not installed on the laptop):
+# - Friend 2 workstation (Ubuntu, RTX A6000 48 GB; bge-reranker-v2-m3 folds):
+#     pip install torch  (PyPI CUDA 12 wheel)  "transformers>=4.44" polars pyarrow numpy sentencepiece protobuf scikit-learn
+#   exact versions were not recorded.
+# - Lab GPU server (Rocky Linux 8, RTX PRO 6000 Blackwell 96 GB; v8.py):
+#     torch==2.8.0 (PyPI wheel, CUDA 12.8, needed for sm_120) polars==1.44.2 lightgbm==4.7.0 rapidfuzz==3.14.6
+#     sparse_dot_topn==1.2.0 transformers==5.17.0 xgboost sentencepiece protobuf numpy scipy scikit-learn pyarrow
+# - sentencepiece is not needed on the laptop: every model used ships a fast tokenizer (tokenizer.json).
+# - faiss is imported only by the experiment script src/dense_blocking_exp.py (not part of the final pipeline).

@@ -1,6 +1,6 @@
 # AWS run plan — Saturday 26 Sep (and Sunday 27 Sep)
 
-> **Superseded 26 Sep 15:00:** AWS was not set up. The GPU run moved to a teammate's RTX 4060 laptop: see `docs/FRIEND_RUN.md` and `2026_STRATEGY.md` §8.
+> **Superseded 26 Sep 15:00:** AWS was not set up. The GPU run moved to a teammate's RTX 4060 laptop: see `docs/runbooks/FRIEND_RUN.md` and `docs/STRATEGY.md` §8.
 
 ## Rules check (Amazon forum answers, 25 Sep)
 - Allowed: MIT/Apache-2.0 open models ≤ 8B each, offline, fine-tuned only on provided data; pure-algorithm libraries (RapidFuzz, scikit-learn, LightGBM, XGBoost, pandas); small hand-written normalisation dictionaries; unsupervised statistics on the test files (TF-IDF, blocking index); self-training and synthetic pairs from provided records.

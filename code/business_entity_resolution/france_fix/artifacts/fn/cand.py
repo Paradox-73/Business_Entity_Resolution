@@ -1,6 +1,6 @@
 import polars as pl
 pl.Config.set_tbl_rows(150); pl.Config.set_tbl_cols(-1); pl.Config.set_tbl_width_chars(320); pl.Config.set_fmt_str_lengths(62); pl.Config.set_float_precision(3)
-OUT = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fn/'
+OUT = 'C:/ber_scratch/frfix2/fn/'
 d = pl.read_parquet(OUT + 'fr_work.parquet')
 na = d.filter((pl.col('num2') == 'NMISS') & (pl.col('sm') == 'na') & (pl.col('stw') >= 0.99))
 print('NMISS with no number anywhere and all S1 street words present:')

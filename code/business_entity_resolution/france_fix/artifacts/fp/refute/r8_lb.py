@@ -1,7 +1,7 @@
 """LB history overlap: veto pairs vs v7ens / v7g_num / v7j / v7m / v7i pair sets; lowercase test of v7g_num's removals."""
 import polars as pl
 from scipy.stats import chi2
-T = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/'
+T = 'C:/ber_scratch/'
 F = T + 'frfix2/fp/'
 v = pl.read_parquet(F + 'fp_veto_set.parquet', columns=['q', 's', 'tier'])
 E = pl.read_parquet(T + 'france/pairs_v7ens.parquet')

@@ -3,8 +3,8 @@ predicts for their true rate: (a) US/India true rate of the same signature among
 (p>=.5) pairs, (b) France lowercase test within name-change signatures (true ~0, fake = US/India lowF of the signature)."""
 import polars as pl
 pl.Config.set_tbl_rows(60); pl.Config.set_tbl_width_chars(250); pl.Config.set_fmt_str_lengths(40)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
-T = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/'
+F = 'C:/ber_scratch/frfix2/fp/'
+T = 'C:/ber_scratch/'
 u = pl.read_parquet(F + 'usi_sig.parquet')
 TT = pl.col('grp') == 'T'
 ref = u.group_by('bsig').agg(tr_all=TT.mean(), tr_rej=TT.filter(pl.col('p') < 0.5).mean(), tr_acc=TT.filter(pl.col('p') >= 0.5).mean(),

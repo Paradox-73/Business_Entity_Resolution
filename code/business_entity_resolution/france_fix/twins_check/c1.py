@@ -2,8 +2,8 @@ import os, sys, polars as pl
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 from common import WORK, id_to_int
 pl.Config.set_tbl_rows(40); pl.Config.set_fmt_str_lengths(60); pl.Config.set_tbl_width_chars(250)
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 # France S1 and France records independently
 S = pl.scan_parquet(os.path.join(WORK, "test_s1.parquet")).filter(pl.col("country") == "France").select(s=id_to_int("entity_id")).collect()
 Q = pl.concat([pl.scan_parquet(os.path.join(WORK, f"test_s{k}.parquet")).filter(pl.col("country") == "France").select(q=id_to_int("entity_id")).collect() for k in (2, 3)])

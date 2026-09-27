@@ -3,8 +3,8 @@ import sys
 sys.path.insert(0, r"E:/Projects/Amazon ML Challenge/code/business_entity_resolution/src")
 import polars as pl
 pl.Config.set_tbl_rows(200); pl.Config.set_tbl_width_chars(250)
-OUT = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/namechg"
-FR = "C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+OUT = "C:/ber_scratch/frfix/namechg"
+FR = "C:/ber_scratch/france"
 # US/India
 u = pl.read_parquet(f"{FR}/usi_top.parquet", columns=["q", "s", "label", "p", "pat", "country"])
 u = u.with_columns(sameacc=(pl.col("pat").str.starts_with("same|") & (pl.col("p") >= 0.5)))

@@ -1,8 +1,8 @@
 """Examples: US/India true records with LEGAL_ADD|UP and SWAP|UP; France tier A examples."""
 import polars as pl
 pl.Config.set_tbl_rows(80); pl.Config.set_tbl_width_chars(300); pl.Config.set_fmt_str_lengths(60)
-F = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix2/fp/'
-T = 'C:/Users/kanav/.claude/jobs/ef6f152d/tmp/'
+F = 'C:/ber_scratch/frfix2/fp/'
+T = 'C:/ber_scratch/'
 u = pl.read_parquet(F + 'usi_sig.parquet', columns=['q', 'grp', 'country', 'p', 'base', 'numc', 'num', 'low'])
 x = u.filter((pl.col('base') == 'LEGAL_ADD') & (pl.col('numc') == 'UP'))
 top = pl.read_parquet(T + 'france/usi_top.parquet', columns=['q', 'qn', 'qa', 'sn', 'sa'])

@@ -3,7 +3,7 @@
 # the wide new pairs -> stage 3 e5l on ce_x (old candidates) and ce_b2 (wide) -> blends -> v7r (wide: small+bge+e5l)
 # and v7s (old candidates: small+bge+e5l), each with France from v7ens / v7m. Log: work/e5l_final.log. Detached.
 set -u
-F2="/c/Users/kanav/.claude/jobs/ef6f152d/tmp/f2"; R="/e/Projects/Amazon ML Challenge"; W="$R/work"; WW="$(cygpath -w "$W")"
+F2="/c/ber_scratch/f2"; R="/e/Projects/Amazon ML Challenge"; W="$R/work"; WW="$(cygpath -w "$W")"
 RW=/home/bhavya/Business_Entity_Resolution/work; L="$W/e5l_final.log"; export PYTHONIOENCODING=utf8
 log() { echo "$(date '+%H:%M:%S') $*" >> "$L"; }
 f2() { (cd "$F2" && MSYS_NO_PATHCONV=1 python f2.py "$@"); }

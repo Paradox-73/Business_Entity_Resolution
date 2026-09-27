@@ -1,7 +1,7 @@
 import polars as pl
 pl.Config.set_tbl_rows(40); pl.Config.set_fmt_str_lengths(60); pl.Config.set_tbl_width_chars(250)
-T = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/frfix/twins"
-F = r"C:/Users/kanav/.claude/jobs/ef6f152d/tmp/france"
+T = r"C:/ber_scratch/frfix/twins"
+F = r"C:/ber_scratch/france"
 s1 = pl.read_parquet(f"{T}/fr_s1kk.parquet")
 s1n = pl.read_parquet(f"{T}/fr_s1.parquet")
 s1 = s1.join(s1n, on="s")

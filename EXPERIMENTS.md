@@ -467,6 +467,15 @@ Three hunts for France/US-India additions after v10b, each proposal checked by a
 
 Built as v10c = v10b + 802 France pairs (`src/apply_pair_sets.py`, sets in `work/final_sets/`); only France rows gain; expected LB +0.00003..0.00005; validator PASS.
 
+### Second final-upload hunt (27 Sep 20:25-20:50 IST; `final_stack/`, `france_fix/final_hunt/fr-strong-veto/`)
+
+| Hunt | Result |
+| --- | --- |
+| US/India LightGBM stacker over both pipelines' per-pair features, cross-fitted by S1 halves, mean of 4 models | held-out **+0.000209** vs the v10a blend (0.99205 -> 0.99226; halves +0.000216 / +0.000202, US +0.000226, India +0.000184; ~13 standard errors); added pairs 84.6% true, removals 43% false; verifier: not refuted |
+| France vetoes where both bge families score low | 13,092 candidates refuted: 83% are 'X <descriptor> SARL' -> '... Développement/Groupe/& Associés', which the US-trained models treat as look-alikes but the v9z leaderboard result shows ~90% true; only 256 'same name and number, completely different street' pairs kept (US/India analog 1/87 true) |
+
+Built as **v10d** = v10c + stacker US/India (US +3,733 / -841, India +3,288 / -434 pairs) - 256 France pairs; expected LB ~0.99067; validator PASS. Final upload.
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.

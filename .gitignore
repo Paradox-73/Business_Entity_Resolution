@@ -24,3 +24,4 @@ __MACOSX/
 
 # competition correspondence (not for the repo)
 2026_official/emails_comms_*.pdf
+*.tsv.gz

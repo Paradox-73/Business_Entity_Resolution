@@ -464,6 +464,12 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 - Files: v9e = v9d + veto; v9f = v9e + additions; v9g = v7ens + v9f France.
 - Mistake caught: the splice_country.py argument order in the workflow prompts was reversed (main, donor, out); all built files verified: US/India identical to the main file, France pair counts as intended.
 
+### v9y LB 0.989563 (27 Sep ~15:10): +0.0064 vs v7ens
+
+- v9y = v7p US/India (wide search + e5-small + bge) + 16,421 gathik v8 pairs our lists never had + France: descriptor veto (22,436) + noise-word additions (9,800) + false-accept veto (1,145).
+- US/India can explain at most ~+0.0025 LB (estimates: bge +0.00065, wide +0.0011..0.0015, gathik recall pairs +0.0004..0.0006 in US/India F) -> France gained ~+0.027 (0.952 -> ~0.979), more than the +0.018..0.024 predicted. The generator-artifact test (lowercase) was the key.
+- LB 27 Sep 15:00: top 0.991811, 50th 0.98918. Gathik's raw v8 file: France keeps 14,280 of the vetoed descriptor pairs -> not uploaded as-is; v9x = his US/India + our France.
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.

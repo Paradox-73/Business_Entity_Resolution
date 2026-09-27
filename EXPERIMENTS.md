@@ -455,6 +455,18 @@ Test file (`submissions/v9`): expF 0.5 (chosen on held-out), France min rule (19
 
 Held-out loss of the v10a-like blend (0.99205, `france_fix/recall/decomp.py`): 0.0080 in total; records without an address 0.0060 of it (not in any list 0.00285, best S1 another 0.00158, rejected 0.00153). Gathik v9's France matches outside our France lists, for records v10a leaves unmatched: 7,266. The same kind of pair on US/India labels (eval half): 28,113 pairs, 98.4% true; without word-level name change, legal-form change/addition or house number moved up: 98.8% true, +0.098 row-F each. France keeps 4,825 (gathik p >= 0.8); 0 of the non-domain names are all-lowercase. Expected France +0.0018, LB +0.00027. Built as v10b (`src/france_recall.py`). **Public LB 0.990475 (+0.000309 vs v10a, France +0.00206)**: the addition was worth slightly more than the labelled analog predicted.
 
+### Final-upload hunt (27 Sep 19:55-20:30 IST; scripts in `france_fix/final_hunt/`)
+
+Three hunts for France/US-India additions after v10b, each proposal checked by an adversarial verifier:
+
+| Hunt | Result |
+| --- | --- |
+| France pairs both pipelines scored, only Gathik's accepted (committee) | no set: US/India labelled analog 69.6% true; France descriptor classes ~0-10% true |
+| The 2,441 second-generator France pairs left out of v10b | noise-word swaps refuted (lowercase test is blind to this class; in-list analog fit 0.77-0.81); garbled-word typos kept (416 of 532, letters shared with the S1 word; t ~0.96); '&' -> 'et'/'+' kept (88) |
+| New same-address generator (same house number and street words, name differs only by acronym/domain/typo-free noise, one S1) | train 651 pairs 99.85% true (+0.109/N each); France 693 refuted as a whole (acronyms can hide a same-initial descriptor swap), safe subset 298 kept; US/India only 62 pairs left |
+
+Built as v10c = v10b + 802 France pairs (`src/apply_pair_sets.py`, sets in `work/final_sets/`); only France rows gain; expected LB +0.00003..0.00005; validator PASS.
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.

@@ -48,3 +48,4 @@
 | v9g | `submissions/v9g/` | Sun 14:06 | 0.98813 (held-out) | _upload & fill in_ | v7ens US/India + v9f France (clean France test of v9f's France) (1632333 S1 rows with matches) |
 | v9q | `submissions/v9q/` | Sun 14:38 | 0.98878 (held-out) | _upload & fill in_ | WIDE-SEARCH TEST: v7q US/India (old candidates + e5-small + bge) + v9e France; LB(v9e) - LB(v9q) = 0.85 x wide-search effect (1631977 S1 rows with matches) |
 | v9x | `submissions/v9x/` | Sun 15:09 | 0.0 (held-out) | _upload & fill in_ | gathik v8 US/India + v9e France (his France keeps 14,280 of the descriptor pairs we veto) (1632602 S1 rows with matches) |
+| v9y | `submissions/v9y/` | Sun 15:09 | 0.98878 (held-out) | _upload & fill in_ | BEST GUESS: v9e + 16,421 gathik US/India pairs our candidate lists never had (India 12,939, US 3,482; his better blocking), records unmatched in v9e only (1632486 S1 rows with matches) |

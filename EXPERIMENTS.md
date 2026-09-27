@@ -436,6 +436,12 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 - Joint stage 3 (`stage3_joint.py`: one XGBoost with both families' logits, margins and ranks + their mean) vs per-family stage 3 + blend: halves 0.98880 vs 0.98878, all-rescored 0.98957 vs 0.98950 (thr 0.75). Noise-level; the final keeps the blend.
 - Queued: e5-large 3 folds on friend 2 (`overnight/e5l_after.sh`, ETA ~18:30-20:00) -> `e5l_final.sh` builds v7r (wide, small+bge+e5l) and v7s (old candidates).
 
+### v7m LB 0.9818 (27 Sep ~11:30): the France restore LOST (France -0.0091)
+
+- v7m = v7ens + fr_restore.py (same first house number AND same street, GBDT g >= 0.5, transformer p3 lower -> p = g). 19,752 pairs crossed 0.5 (mean p3 0.19, mean g 0.86); 16.7k are descriptor swaps at the same address ('Didier Club SARL' -> 'Didier Ecole SARL', 'Bordeaux Sportive' -> 'Bordeaux Centre SA').
+- Micro approximation: ~40% of them true. **In France a descriptor swap at the same address is mostly a DIFFERENT business** (US: 98.9% true, so the US-trained GBDT is over-confident on France name changes). The label-free 'decoy words keep the number 3%' argument missed this kind (no number change).
+- France LB points now usable as aggregate labels (all on the same candidates, US/India identical): v7ens 0.9518, v7m -0.0091, v7i -0.0035 (transformer additions), v7j -0.0163 (number-changed additions, ~8% true). Workflow 'fix-france' (27 Sep 11:40) fits France probabilities to them.
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.

@@ -266,9 +266,9 @@ python student_resource/utils/validate_submission.py -m output/matching_results.
 | Machine | Hardware | What ran there |
 |---|---|---|
 | Team laptop | i5-12450H, 16 GB RAM, RTX 3050 4 GB | cleaning, blocking, stages 1–3, e5-small folds, France rules, assembly |
-| Bhavya's workstation | RTX A6000 48 GB | bge-reranker-v2-m3 fold models; e5-large folds 0-1 |
+| Bhavya's GPU machine | RTX A6000 48 GB | bge-reranker-v2-m3 fold models; e5-large folds 0-1 |
 | Lab GPU server (Gathik) | RTX PRO 6000 Blackwell 96 GB, shared | the second pipeline; e5-large fold 2 |
-| A teammate's laptop | RTX 4060 8 GB | multilingual-e5-base folds (earlier versions) |
+| Harsh's laptop | RTX 4060 8 GB | multilingual-e5-base folds (earlier versions) |
 
 ---
 

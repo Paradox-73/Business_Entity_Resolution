@@ -41,6 +41,9 @@ The official problem statement, rules and video transcript are copied **word for
 | v7i | v7ens, transformer may also ADD France matches | — | **0.982636** → France −0.0035 | yes, 26 Sep |
 | v7ens_frbase | PROBE: v7ens, France without transformer | — | — | ready: measures the transformer's France removals |
 | v7blend | 0.7 v6-reranked + 0.3 v3-reranked | 0.98801 | — | not recommended |
+| v8a | NEW pipeline (lab GPU server): audited blocking + stage-1 GBDT (8% train sample) + 3-fold bge-reranker-v2-m3 on close calls + stack; no stage 2; France min rule + veto | 0.9761 train-sample (not comparable) | — | ready 27 Sep 08:35 (`submissions/v8a`) |
+| v8b | v8a, France without the transformer | same | — | ready (`submissions/v8b`) |
+| v9 | FULL rebuild with the v8 blocking + stages 1-2 + 3-fold bge + stage 3 (comparable with v7g) | running | — | expected 27 Sep afternoon |
 | LB leader | — | — | **0.990621** (26 Sep) | — |
 
 Submissions used on day 1: 5 of 5 (v2, v3, v5, v4, v6). Day 2 so far: v7ens **0.983159** (+0.0132 over v3). Gap to the leader: **0.0075**. Details of the night's work: EXPERIMENTS.md.
@@ -229,7 +232,7 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 ### 8.6 Night 26→27 Sep (Gathik + Claude Code): blocking audit, deep-learning matcher, v8 — details in EXPERIMENTS.md
 - **Blocking audit (laptop, full density):** the name search's df cap (4000, tuned on S10) starves it at full size; with the name cap 10000–20000, word searches min_df 1, no-address k 100 and a dense e5 search for every record, shortlist recall goes US 0.9868 → 0.9971, India 0.9784 → 0.9956 (Latin names). Cleaning bugs: India state codes (pooled map sends 'TN' to 'tennessee', 'DL'/'OD' unmapped; 6.6% of India records) and ordinals ('eleventh' vs '11th'). All of it is opt-in in the code with `BER_V8=1`; defaults are unchanged.
 - **Deep learning as the final matcher (lab GPU server, 80k-S1 sample at full density):** fine-tuned bge-reranker-v2-m3 alone 0.99321 vs GBDT 0.98998 on the same candidates; stack 0.99362; the close-call-only design 0.99351. Transformers are the better matcher, the close-call design is right, and the remaining lever is transformer quality. Sample numbers are optimistic (not comparable with 0.98813).
-- **v8 (running overnight on the lab server, GPU 2 only):** v8 blocking/cleaning + stage-1 GBDT trained on a sample of train records + 3-fold bge-reranker-v2-m3 on close calls + stack, test streamed chunk by chunk (the shared disk cannot hold full pair features). Two files: **v8a** (France: transformer may only lower p + legal-form veto) and **v8b** (France without the transformer). Not validated at full density against v7ens; no stage 2 (its group features need all train records). Upload only if the team agrees; one change at a time vs v7ens is not possible (new blocking + new model + no stage 2 at once).
+- **v8 (done 27 Sep 08:35 IST):** v8 blocking/cleaning + stage-1 GBDT trained on 8% of the eligible train records + 3-fold bge-reranker-v2-m3 on close calls (37% of test records) + stack, test streamed chunk by chunk. Train-sample held-out GBDT 0.9545 -> v8 0.9761 (record-sampled protocol, not comparable with 0.98813). **v8a** (France: transformer may only lower + legal veto; France 849k matched) and **v8b** (France without the transformer; 887k); US/India identical in both; both pass the official validator. Not validated at FULL density and no stage 2, so v8a changes several things at once vs v7ens: if uploaded, its score tells whether the new pipeline as a whole is better; v8b - v8a then gives the transformer's France effect.
 
 # Appendix A — Problem statement (verbatim, student_resource/README.md)
 

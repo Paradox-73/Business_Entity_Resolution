@@ -38,6 +38,7 @@ SMOKE = os.environ.get("BER_V8_SMOKE") == "1"          # tiny run: 1 test chunk 
 MODEL = os.environ.get("BER_V8_MODEL", "BAAI/bge-reranker-v2-m3")
 CE_TRAIN = int(os.environ.get("BER_V8_CE_TRAIN", "300000"))
 ROUNDS = 20 if SMOKE else 600
+SUB = int(os.environ.get("BER_V8_SUB", "50000"))    # test records per feature pass (peak RAM)
 K = 5
 LO, HI, P1_2ND = 0.01, 0.995, 0.2
 XP = dict(tree_method="hist", device="cuda", objective="binary:logistic", eta=0.06, max_depth=10, min_child_weight=20,
@@ -138,13 +139,21 @@ def step_test():
             out = os.path.join(d, f"{c}_{i:03d}.parquet")
             if os.path.exists(out):
                 continue
-            p = pairs_frame(idx.chunk_pairs(q.slice(a, CHUNK)))
-            dm = xgb.DMatrix(p.select(FEATURES).to_numpy().astype(np.float32))
-            p1 = np.mean([m.predict(dm) for m in models], axis=0).astype(np.float32)
-            t = top_k(p.select("q", "s").with_columns(p1=pl.Series(p1)), "p1")
+            # sub-chunks keep peak RAM low on a shared server (the kernel OOM killer stopped this step 3 times);
+            # top-K is per record, so splitting a chunk's records does not change its output file
+            parts, n_pairs = [], 0
+            sub = q.slice(a, CHUNK)
+            for b in range(0, sub.height, SUB):
+                p = pairs_frame(idx.chunk_pairs(sub.slice(b, SUB)))
+                dm = xgb.DMatrix(p.select(FEATURES).to_numpy().astype(np.float32))
+                p1 = np.mean([m.predict(dm) for m in models], axis=0).astype(np.float32)
+                parts.append(top_k(p.select("q", "s").with_columns(p1=pl.Series(p1)), "p1"))
+                n_pairs += p.height
+                del p, dm
+            t = pl.concat(parts)
             t.with_columns(country=pl.lit(c)).write_parquet(out + ".tmp")
             os.replace(out + ".tmp", out)
-            log(f"test {c} chunk {i}: {p.height} pairs -> top-{K} {t.height}")
+            log(f"test {c} chunk {i}: {n_pairs} pairs -> top-{K} {t.height}")
         del idx
         torch.cuda.empty_cache()
         open(os.path.join(d, f"{c}.done"), "w").close()

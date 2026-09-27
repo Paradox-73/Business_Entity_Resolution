@@ -1,0 +1,60 @@
+{
+ "train_sample_heldout": {
+  "GBDT stage 1": 0.9545,
+  "v8 (stack on close calls)": 0.9761
+ },
+ "test_close_call_records": 3684716,
+ "test_records": 9969589,
+ "v8a": {
+  "checks": {
+   "rows": 0,
+   "dup_s1": 0,
+   "dup_id": 0,
+   "unknown_id": 0,
+   "id_in_two_lists": 0
+  },
+  "matched_records_and_s1_by_country": [
+   [
+    "France",
+    849482,
+    245087
+   ],
+   [
+    "India",
+    2736774,
+    763942
+   ],
+   [
+    "US",
+    2238857,
+    625291
+   ]
+  ]
+ },
+ "v8b": {
+  "checks": {
+   "rows": 0,
+   "dup_s1": 0,
+   "dup_id": 0,
+   "unknown_id": 0,
+   "id_in_two_lists": 0
+  },
+  "matched_records_and_s1_by_country": [
+   [
+    "France",
+    887192,
+    246694
+   ],
+   [
+    "India",
+    2736774,
+    763942
+   ],
+   [
+    "US",
+    2238857,
+    625291
+   ]
+  ]
+ }
+}

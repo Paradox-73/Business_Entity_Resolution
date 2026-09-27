@@ -43,7 +43,7 @@ The official problem statement, rules and video transcript are copied **word for
 | v7blend | 0.7 v6-reranked + 0.3 v3-reranked | 0.98801 | — | not recommended |
 | v8a | NEW pipeline (lab GPU server): audited blocking + stage-1 GBDT (8% train sample) + 3-fold bge-reranker-v2-m3 on close calls + stack; no stage 2; France min rule + veto | 0.9761 train-sample (not comparable) | — | ready 27 Sep 08:35 (`submissions/v8a`) |
 | v8b | v8a, France without the transformer | same | — | ready (`submissions/v8b`) |
-| v9 | FULL rebuild with the v8 blocking + stages 1-2 + 3-fold bge + stage 3 (comparable with v7g) | GBDT stages 1-2: **0.98472** (full_cons 0.98151); recall ceiling 0.9963; transformer stage running | — | expected 27 Sep afternoon |
+| **v9** | FULL rebuild with the v8 blocking + stages 1-2 + 3-fold bge-reranker-v2-m3 + stage 3 + France min rule + veto | **0.99112** halves protocol (v7ens 0.98813, v7g 0.98845); GBDT alone 0.98472 | — | **ready 27 Sep 12:55** (`submissions/v9`, with candidate_pairs.tsv) — recommended upload |
 | LB leader | — | — | **0.990621** (26 Sep) | — |
 
 Submissions used on day 1: 5 of 5 (v2, v3, v5, v4, v6). Day 2 so far: v7ens **0.983159** (+0.0132 over v3). Gap to the leader: **0.0075**. Details of the night's work: EXPERIMENTS.md.

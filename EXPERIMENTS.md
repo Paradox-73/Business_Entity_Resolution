@@ -424,7 +424,16 @@ Pipeline (`BER_V8=1`): audited blocking + cleaning -> stage-1 GBDT (XGBoost dept
 | production blocking (run 9 / `full_cons`) | 0.9851 | 0.9724 | 0.9788 (base) | **0.98151** |
 | v8 blocking + cleaning (v9) | **0.9963** | **0.9753** | 0.9844 | **0.98472 (+0.0032)** |
 
-  417.5M train pairs (40.5 per record vs ~31). The blocking/cleaning audit is worth +0.0032 before any transformer; the transformer stage (bge 3-fold) follows.
+  417.5M train pairs (40.5 per record vs ~31). The blocking/cleaning audit is worth +0.0032 before any transformer.
+- **v9 transformer stage (27 Sep 10:27-12:54 IST):** close calls train 1.88M pairs (1.47M records), test 2.65M pairs (2.17M records, 22%: stage 2 is more certain than v8's stage 1, 37%); 3 fold models of bge-reranker-v2-m3 (fully fine-tuned, 1M pairs each, ~27 min training + ~20 min scoring per fold on the Blackwell GPU); fold models agree on test (corr 0.9866).
+
+| held-out macro F0.5 (eval-half S1) | v7ens | v7g | **v9** |
+|---|---|---|---|
+| halves protocol (mixed records keep GBDT p2) | 0.98813 | 0.98845 | **0.99112** |
+| all close calls rescored | — | 0.98911 | **0.99183** (GBDT 0.98472 -> +0.0071) |
+| all S1 rows | — | — | 0.99187 |
+
+  Test file (`submissions/v9`): expF 0.5 (chosen on held-out), France min rule (197,140 France pairs lowered back to the GBDT p) + legal-form veto (4,857 pairs with p2 >= 0.3); matched France 853,628 / India 2,748,510 / US 2,255,299; 1,632,885 S1 rows; server check PASS. **+0.0030 over v7ens on the same protocol; US/India change is validated, France uses the team's validated rules.**
 
 ## Lessons (read before changing anything)
 

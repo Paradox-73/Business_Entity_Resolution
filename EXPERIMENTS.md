@@ -453,7 +453,7 @@ Test file (`submissions/v9`): expF 0.5 (chosen on held-out), France min rule (19
 
 ### France recall from the second generator (27 Sep 18:40 IST; v10b)
 
-Held-out loss of the v10a-like blend (0.99205, `france_fix/recall/decomp.py`): 0.0080 in total; records without an address 0.0060 of it (not in any list 0.00285, best S1 another 0.00158, rejected 0.00153). Gathik v9's France matches outside our France lists, for records v10a leaves unmatched: 7,266. The same kind of pair on US/India labels (eval half): 28,113 pairs, 98.4% true; without word-level name change, legal-form change/addition or house number moved up: 98.8% true, +0.098 row-F each. France keeps 4,825 (gathik p >= 0.8); 0 of the non-domain names are all-lowercase. Expected France +0.0018, LB +0.00027. Built as v10b (`src/france_recall.py`).
+Held-out loss of the v10a-like blend (0.99205, `france_fix/recall/decomp.py`): 0.0080 in total; records without an address 0.0060 of it (not in any list 0.00285, best S1 another 0.00158, rejected 0.00153). Gathik v9's France matches outside our France lists, for records v10a leaves unmatched: 7,266. The same kind of pair on US/India labels (eval half): 28,113 pairs, 98.4% true; without word-level name change, legal-form change/addition or house number moved up: 98.8% true, +0.098 row-F each. France keeps 4,825 (gathik p >= 0.8); 0 of the non-domain names are all-lowercase. Expected France +0.0018, LB +0.00027. Built as v10b (`src/france_recall.py`). **Public LB 0.990475 (+0.000309 vs v10a, France +0.00206)**: the addition was worth slightly more than the labelled analog predicted.
 
 ## Lessons (read before changing anything)
 

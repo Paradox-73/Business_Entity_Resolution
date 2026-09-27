@@ -1,4 +1,4 @@
-"""Apply pair sets to a submission: remove the pairs of 'veto' sets, then add the pairs of 'add' sets.
+"""Apply pair sets to a submission in the order given: a -set removes its pairs, a +set adds its pairs.
 
 Each set is a parquet file with integer columns s (S1 id) and q (record id). An added record that the file already
 matches elsewhere is moved (its old pair is removed), so every record keeps at most one S1 row. Checks: added pairs join
@@ -14,11 +14,14 @@ from common import WORK, id_to_int, int_to_id, log, read_tsv
 
 
 def pairs(p):
+    """(s, q) integer pairs of a matching_results.tsv."""
     return (read_tsv(p).with_columns(q_id=pl.col("matched_entity_ids").fill_null("").str.split(",")).explode("q_id")
             .filter(pl.col("q_id") != "").select(s=id_to_int("source1_entity_id").cast(pl.Int64), q=id_to_int("q_id").cast(pl.Int64)))
 
 
 def main(base_tsv, out, *sets):
+    """Apply each +set / -set to the pairs of base_tsv, in the order given, and write
+    <out>/matching_results.tsv (every test S1 row)."""
     s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
         s1_id="entity_id", s=id_to_int("entity_id").cast(pl.Int64), country="country")
     rec = pl.concat([pl.read_parquet(os.path.join(WORK, f"test_s{k}.parquet"), columns=["entity_id", "country"]) for k in (2, 3)]).select(

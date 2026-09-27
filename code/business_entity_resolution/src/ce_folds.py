@@ -24,6 +24,8 @@ from common import WORK  # noqa: E402  (also opts this process out of Windows po
 
 
 def main():
+    """Parse the options, check the inputs and the GPU, then for each fold train (rerank.py train) and score
+    (rerank.py score), each step with up to 3 tries; steps already finished are skipped."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="intfloat/multilingual-e5-base")
     ap.add_argument("--name", default="base")
@@ -41,6 +43,7 @@ def main():
     logf = os.path.join(WORK, f"ce_folds_{a.name}{'_smoke' if a.smoke else ''}.log")
 
     def log(msg):
+        """Print msg with the time of day and append it to WORK/ce_folds_<name>.log."""
         line = f"{time.strftime('%H:%M:%S')} {msg}"
         print(line, flush=True)
         with open(logf, "a", encoding="utf8") as f:
@@ -52,11 +55,13 @@ def main():
             sys.exit(f"missing input {need} (unzip the data bundle into the repo root first)")
     import torch
     if not torch.cuda.is_available():
-        sys.exit("no CUDA GPU visible to torch: install the CUDA build of torch (see docs/runbooks/FRIEND_RUN.md)")
+        sys.exit("no CUDA GPU visible to torch: install the CUDA build of torch (README.md section 2)")
     log(f"GPU {torch.cuda.get_device_name(0)}, {torch.cuda.get_device_properties(0).total_memory / 2**30:.1f} GB; "
         f"model {a.model}; name {a.name}; smoke {a.smoke}")
 
     def run(what, env_extra, args):
+        """Run 'rerank.py <args>' with the fold's environment, output to WORK/ce_folds_<name>_<what>.log; up to 3
+        tries, 60 s apart. Returns True on success."""
         env = dict(os.environ, PYTHONIOENCODING="utf8", BER_CE_DIR=a.dir, BER_CE_NAME=a.name, **env_extra)
         if a.batch:
             env["BER_CE_BS"] = a.batch

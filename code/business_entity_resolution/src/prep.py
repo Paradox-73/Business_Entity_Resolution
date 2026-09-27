@@ -8,6 +8,8 @@ from normalize import normalize
 
 
 def main(splits=("train", "test")):
+    """Clean the three source files of each split with the learned maps (WORK/maps.json)
+    -> WORK/<split>_s<k>.parquet; files already written are kept."""
     maps = json.load(open(os.path.join(WORK, "maps.json"), encoding="utf8"))
     for split in splits:
         for k in (1, 2, 3):

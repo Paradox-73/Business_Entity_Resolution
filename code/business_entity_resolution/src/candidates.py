@@ -45,12 +45,14 @@ class HashTfidf:
     on S1, terms in more than max_df S1 rows or in none dropped, L2-normalised rows (as sklearn)."""
 
     def __init__(self, max_df, nf=1 << 24):
+        """Hashed word 1-2-gram vectoriser (2**24 buckets); terms in more than max_df S1 rows get weight 0."""
         from sklearn.feature_extraction.text import HashingVectorizer
         self.hv = HashingVectorizer(analyzer="word", ngram_range=(1, 2), token_pattern=r"\S+", lowercase=False,
                                     n_features=nf, alternate_sign=False, norm=None, dtype=np.float32)
         self.max_df = max_df
 
     def fit_transform(self, texts):
+        """Fit the idf on the S1 texts; return their weighted, L2-normalised rows."""
         S = self.hv.transform(texts).tocsr()
         n = S.shape[0]
         df = np.bincount(S.indices, minlength=S.shape[1])
@@ -58,9 +60,11 @@ class HashTfidf:
         return self._weigh(S)
 
     def transform(self, texts):
+        """Weighted, L2-normalised rows of record texts, with the idf fitted on S1."""
         return self._weigh(self.hv.transform(texts).tocsr())
 
     def _weigh(self, M):
+        """Sublinear tf x idf, zero weights removed, rows L2-normalised (modifies M)."""
         M.data = ((1 + np.log(M.data)) * self.idf[M.indices]).astype(np.float32)
         M.eliminate_zeros()
         nr = np.sqrt(np.asarray(M.multiply(M).sum(1)).ravel())
@@ -74,29 +78,37 @@ _ALNUM = r"[a-z0-9]*\d[a-z0-9]*(?:[/\-][a-z0-9]+)*"
 
 
 def _vec(max_df):
+    """TF-IDF over character 3-grams (min_df 2, sublinear tf); max_df caps a term's document frequency
+    (1.0 = no cap)."""
     return TfidfVectorizer(analyzer="char", ngram_range=(3, 3), min_df=2, max_df=max_df,
                            sublinear_tf=True, dtype=np.float32, lowercase=False)
 
 
 def _wvec(max_df):
+    """TF-IDF over word 1-2-grams of whitespace tokens (min_df 2, sublinear tf), document-frequency cap max_df."""
     return TfidfVectorizer(analyzer="word", ngram_range=(1, 2), token_pattern=r"\S+", min_df=2, max_df=max_df,
                            sublinear_tf=True, dtype=np.float32, lowercase=False)
 
 
 def _comb(df):
+    """Text of the combined search, one string per row: core name + ' ' + cleaned address."""
     return (df["name_core"] + " " + df["addr"]).to_list()
 
 
 def _pad(series):
+    """Pad each string with spaces, so the first and last character 3-grams mark the word boundaries."""
     return (" " + series + " ").to_list()
 
 
 def _topn(A, B, k):
+    """Top-k cosine neighbours in B of each row of A (sparse product; scores below 0.01 dropped).
+    Returns the (row, column) index arrays."""
     C = sp_matmul_topn(A, B, top_n=k, threshold=0.01, n_threads=THREADS).tocoo()
     return C.row.astype(np.int64), C.col.astype(np.int64)
 
 
 def _rowdot(A, B, qi, si):
+    """Cosine of row qi[i] of A with row si[i] of B for every pair i, 2M pairs at a time."""
     out = np.empty(len(qi), np.float32)
     for a in range(0, len(qi), 2_000_000):
         b = a + 2_000_000
@@ -105,10 +117,12 @@ def _rowdot(A, B, qi, si):
 
 
 def _fuzz(a, b, scorer):
+    """rapidfuzz `scorer` applied to the string pairs (a[i], b[i]), as float32."""
     return cpdist(a, b, scorer=scorer, workers=int(os.environ.get("BER_THREADS", "-1")), dtype=np.float32)
 
 
 def _alnum(col):
+    """Polars expression: the unique lowercased tokens of an address that contain a digit, such as '8-9-1/14a'."""
     return (pl.col(col).fill_null("").str.to_lowercase().str.replace_all(r"\s*([/\-])\s*", "$1")
               .str.extract_all(_ALNUM).list.unique())
 
@@ -117,6 +131,8 @@ class CountryIndex:
     """Holds the S1 rows of one country, fitted vectorisers and (optionally) S1 name embeddings."""
 
     def __init__(self, s1, split):
+        """Fit the search vectorisers and the full-vocabulary feature vectorisers on the S1 rows of one country, and
+        load the S1 embeddings of `split` when WORK/emb holds them."""
         self.s1 = (s1.select(S_COLS).with_row_index("s_row")
                      .with_columns(s_name_count=pl.len().over("name_core").cast(pl.Float32),
                                    alnum=_alnum("business_address")))
@@ -237,6 +253,9 @@ def _margin(p, c, grp="q_row"):
 
 
 def add_features(p):
+    """The 55 pair features (FEATURES) of candidate pairs p, which hold the record's columns and the S1 row's
+    columns (suffix _s): name and address similarities, house-number agreement, lengths, flags, and the margin and rank of
+    six similarities among the record's candidates. Returns entity_id, entity_id_s and FEATURES."""
     qn, sn = p["name_core"].to_list(), p["name_core_s"].to_list()
     qs, ss = p["name_ns"].to_list(), p["name_ns_s"].to_list()
     qa, sa = p["addr"].to_list(), p["addr_s"].to_list()

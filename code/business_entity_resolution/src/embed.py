@@ -5,9 +5,10 @@ contrastive loss (MultipleNegativesRanking) on TRAIN pairs (non-Latin S2/S3 name
 Only S1 rows in the "embedding partition" (id hash % 1000 >= 500) are used for fine-tuning, so the
 other half of train stays clean for validating the downstream model.
 
-  python embed.py train           # fine-tune -> WORK/e5_ft/
-  python embed.py eval            # recall@10 before/after on held-out rows
-  python embed.py encode          # embeddings -> WORK/emb/{split}_{s1|q}.npz
+  python embed.py train           # fine-tune -> WORK/e5_ft_addr/
+  python embed.py eval            # recall@10 of the fine-tuned model on held-out rows
+  python embed.py encode          # non-Latin records + S1 rows of their countries -> WORK/emb/{split}_{s1|q}.npz
+  python embed.py encode_all      # every S1 row and record (second pipeline) -> WORK/emb/{split}_s1all.npz, _qall_*.npy
 """
 import os
 import sys
@@ -32,6 +33,7 @@ def emb_partition(s1_id):
 
 
 def prep_text(s):
+    """Model input for multilingual-e5: 'query: ' + the lowercased text."""
     return "query: " + (s or "").lower()
 
 
@@ -42,11 +44,14 @@ def text_col():
 
 
 class Encoder:
+    """multilingual-e5 sentence encoder: mean-pooled, L2-normalised vectors."""
     def __init__(self, path):
+        """Load the tokenizer and the model from `path` (hub name or saved folder), on the GPU when there is one."""
         self.tok = AutoTokenizer.from_pretrained(path)
         self.model = AutoModel.from_pretrained(path).to(DEV)
 
     def forward(self, texts):
+        """Vectors of a list of texts, with gradients (training); at most MAXLEN tokens each."""
         b = self.tok(texts, padding=True, truncation=True, max_length=MAXLEN, return_tensors="pt").to(DEV)
         h = self.model(**b).last_hidden_state
         m = b["attention_mask"].unsqueeze(-1).to(h.dtype)
@@ -54,6 +59,7 @@ class Encoder:
 
     @torch.no_grad()
     def encode(self, texts, bs=1024):
+        """float16 vectors of `texts`, bs texts per batch, without gradients."""
         self.model.eval()
         out = np.empty((len(texts), self.model.config.hidden_size), np.float16)
         for a in range(0, len(texts), bs):
@@ -63,6 +69,8 @@ class Encoder:
 
 
 def nonlatin_pairs(partition_flag):
+    """Train pairs (non-Latin-script record text, S1 text) whose S1 row is in the embedding half
+    (partition_flag True) or in the held-out half (False)."""
     truth = read_truth()
     q = pl.concat([pl.read_parquet(os.path.join(WORK, f"train_s{k}.parquet"),
                                    columns=["entity_id", "business_name", "addr", "name_nonlatin"]) for k in (2, 3)])
@@ -74,6 +82,8 @@ def nonlatin_pairs(partition_flag):
 
 
 def train(epochs=1, bs=128, lr=5e-5, max_pairs=300_000):
+    """Fine-tune multilingual-e5-small on up to max_pairs (record, S1) text pairs of the embedding half: in-batch
+    contrastive loss, temperature 0.05, word-embedding table frozen. Saves the model to WORK/e5_ft_addr/."""
     pr = nonlatin_pairs(True).sample(fraction=1.0, shuffle=True, seed=0).head(max_pairs)
     log(f"fine-tune pairs: {pr.height}")
     enc = Encoder(BASE)
@@ -175,7 +185,7 @@ if __name__ == "__main__":
         train()
     elif cmd == "eval":
         log(f"recall@10 fine-tuned: {recall_at_k(FT):.4f}")
-    elif cmd == "encode":
+    elif cmd == "encode":        # encode_all(): non-Latin records and the S1 rows of their countries (step 2)
         encode_all()
-    elif cmd == "encode_all":
+    elif cmd == "encode_all":    # encode_all_records(): every S1 row and record (second pipeline, BER_V8=1)
         encode_all_records()

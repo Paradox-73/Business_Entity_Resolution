@@ -24,7 +24,13 @@ KMAX, MINP = 5, 0.005
 
 
 def free_gb():
+    """Free physical RAM in GB, read with a Windows API call; on other systems the value of BER_FREE_GB
+    (default 64)."""
+    if os.name != "nt":
+        return float(os.environ.get("BER_FREE_GB", "64"))
+
     class M(ctypes.Structure):
+        """MEMORYSTATUSEX of the Windows API."""
         _fields_ = [("l", ctypes.c_ulong), ("load", ctypes.c_ulong), ("tot", ctypes.c_ulonglong), ("avail", ctypes.c_ulonglong),
                     ("tp", ctypes.c_ulonglong), ("ap", ctypes.c_ulonglong), ("tv", ctypes.c_ulonglong), ("av", ctypes.c_ulonglong),
                     ("ae", ctypes.c_ulonglong)]
@@ -35,11 +41,15 @@ def free_gb():
 
 
 def ranks(p):
+    """Candidates ranked 3 to KMAX by p1 within their record, with p1 >= MINP."""
     r = p.with_columns(r=pl.col("p1").rank("ordinal", descending=True).over("q"))
     return r.filter((pl.col("r") >= 3) & (pl.col("r") <= KMAX) & (pl.col("p1") >= MINP))
 
 
 def main(split, md_name="full"):
+    """Stage-1 ranks 3-5 of the close-call records of `split`: train with out-of-fold p1 of the 3 fold models,
+    label and fold; test with the full-sample model (or the mean of the fold models). Writes one part per chunk to
+    WORK/rank3_5_<split>_<md_name>/, then the joined table (paths in the module docstring)."""
     md = os.path.join(WORK, "models", md_name)
     res = json.load(open(os.path.join(md, "result.json")))
     cols1 = res.get("cols1", FEATURES)

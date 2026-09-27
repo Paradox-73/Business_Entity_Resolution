@@ -33,6 +33,8 @@ def mixed_q():
 
 
 def held_out(md, ce, sfx):
+    """Held-out probability of one base: stage-3 p3 for records with close calls (<ce>/oof_s3<sfx>.parquet),
+    GBDT p2 for the other records (WORK/models/<md>/oof.parquet). Returns q, s, p."""
     oof = pl.read_parquet(os.path.join(WORK, "models", md, "oof.parquet"), columns=["q", "s", "p2"]).with_columns(
         pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     s3 = pl.read_parquet(os.path.join(WORK, ce, f"oof_s3{sfx}.parquet"), columns=["q", "s", "p3"]).with_columns(
@@ -46,6 +48,8 @@ def held_out(md, ce, sfx):
 
 
 def combine(frames, w):
+    """Weighted mean p2 of the bases' p per pair; a pair missing from a base is averaged over the bases that
+    have it."""
     out = None
     for i, f in enumerate(frames):
         f = f.rename({"p": f"p{i}"})
@@ -57,6 +61,8 @@ def combine(frames, w):
 
 
 def main(name, specs):
+    """Held-out macro F0.5 of each weight (0.3 / 0.7, 0.5 / 0.5, 0.7 / 0.3 for two bases) and decision rule; the
+    best blend of the test scores -> WORK/test_scores_blend_<name>.parquet, its rule -> WORK/ce/rule_blend_<name>.json."""
     specs = [x.split(":") for x in specs]
     frames = [held_out(*x) for x in specs]
     s1 = pl.read_parquet(os.path.join(WORK, "train_s1.parquet"), columns=["entity_id"]).select(

@@ -15,6 +15,7 @@ from common import WORK, id_to_int, int_to_id, log
 
 
 def pairs(p):
+    """(s, q) integer pairs of a pair-set parquet file, or of a matching_results.tsv / candidate_pairs.tsv."""
     if p.endswith(".parquet"):   # a pair set (s, q) from another generator, e.g. the same-address generator
         return pl.read_parquet(p, columns=["s", "q"]).with_columns(pl.col("s").cast(pl.Int64), pl.col("q").cast(pl.Int64))
     d = pl.read_csv(p, separator="\t", schema_overrides={d_: pl.Utf8 for d_ in ("matched_entity_ids", "candidate_entity_ids")})
@@ -24,6 +25,8 @@ def pairs(p):
 
 
 def main(scores, matching, out, *extra):
+    """Write <out>/candidate_pairs.tsv: every (q, s) of the score table `scores`, plus, for each extra file, its
+    pairs that `matching` matches and that are not yet candidates. Stops if a matched pair is not a candidate."""
     s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id"]).select(
         s1_id="entity_id", s=id_to_int("entity_id").cast(pl.Int64))
     C = pl.read_parquet(scores, columns=["q", "s"]).with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))

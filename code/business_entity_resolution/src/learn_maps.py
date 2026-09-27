@@ -20,16 +20,21 @@ N_PAIRS = 400_000
 
 
 def is_subseq(s, t):
+    """True if the characters of s appear in t in the same order."""
     it = iter(t)
     return all(c in it for c in s)
 
 
 def base_addr(e):
+    """Polars expression: address lowercased, accents and non-ASCII characters removed, punctuation turned
+    into spaces, junk tokens dropped."""
     x = _ascii_lower(e).str.replace_all(r"[^\x00-\x7F]", " ").str.replace_all(r"[^a-z0-9]+", " ")
     return _squash(x.str.replace_all(_JUNK, " "))
 
 
 def main():
+    """Learn abbrev_map and script_map from 400,000 sampled true train pairs (rules in the module docstring) and
+    write WORK/maps.json."""
     gt = read_truth().sample(N_PAIRS, seed=0)
     s1 = read_tsv(raw_path("train", 1)).filter(pl.col("entity_id").is_in(gt["s1_id"].unique().to_list()))
     need = gt["q_id"].to_list()

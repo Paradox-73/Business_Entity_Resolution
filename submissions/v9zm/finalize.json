@@ -1,1 +1,1 @@
-{"us_india": "v9y US/India + list-mover fix (tmp/maxplan/s5 tier1+2: -839 / +832, transformer prob decides where old and wide lists disagree; label check on rebuilt train sample)", "france": "v9z France", "candidates": "out_v9zm/candidate_pairs.tsv"}
+{"us_india": "v9y US/India + list-mover fix (src/movers/build_movers.py, sets/tier12_*: -839 / +832, transformer prob decides where old and wide lists disagree; label check on rebuilt train sample)", "france": "v9z France", "candidates": "out_v9zm/candidate_pairs.tsv"}

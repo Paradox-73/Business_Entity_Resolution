@@ -12,6 +12,7 @@ from common import WORK, id_to_int, int_to_id, log
 
 
 def pairs(p, s1):
+    """(s, q, country) integer pairs of a matching_results.tsv."""
     d = pl.read_csv(p, separator="\t", schema_overrides={"matched_entity_ids": pl.Utf8}).filter(
         pl.col("matched_entity_ids").fill_null("") != "")
     return (d.select(s=id_to_int("source1_entity_id").cast(pl.Int64), q=pl.col("matched_entity_ids").str.split(","))
@@ -19,6 +20,8 @@ def pairs(p, s1):
 
 
 def main(ui_tsv, fr_tsv, out, g_tsv=None, lists=os.path.join(WORK, "test_scores_blend_v7p.parquet")):
+    """Write <out>/matching_results.tsv: the US/India pairs of ui_tsv, the France pairs of fr_tsv and, with
+    g_tsv, the US/India pairs of g_tsv that are absent from the score table `lists`, for records ui_tsv leaves unmatched."""
     s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
         s1_id="entity_id", s=id_to_int("entity_id").cast(pl.Int64), country="country")
     ui = pairs(ui_tsv, s1).filter(pl.col("country") != "France")

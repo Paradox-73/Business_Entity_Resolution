@@ -70,10 +70,14 @@ def close_calls(b):
 
 
 def half(col):
+    """Polars expression: crc32(id) % 1000 of an id column; values below 500 mark the held-out half."""
     return pl.col(col).map_elements(lambda x: zlib.crc32(x.encode()) % 1000, return_dtype=pl.Int64)
 
 
 def select(model_dir):
+    """Close calls of the out-of-fold table WORK/models/<model_dir>/oof.parquet (each record with its group
+    train / eval / mixed by S1 half) and of WORK/test_scores_<model_dir>.parquet -> OUT/{train,test}_rows.parquet,
+    OUT/select.json."""
     os.makedirs(OUT, exist_ok=True)
     oof = pl.read_parquet(os.path.join(WORK, "models", model_dir, "oof.parquet"))
     s1 = pl.read_parquet(os.path.join(WORK, "train_s1.parquet"), columns=["entity_id", "country"]).select(
@@ -93,6 +97,7 @@ def select(model_dir):
 
 
 def _pairs(rows, split):
+    """rows with the texts of both sides: tq (record) and ts (S1 row), 'name | address' lowercased."""
     tx = texts(split, pl.concat([rows.select(id=pl.col("q").cast(pl.Int64)), rows.select(id=pl.col("s").cast(pl.Int64))]).unique())
     rows = rows.with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     r = (rows.join(tx.rename({"id": "q", "t": "tq"}), on="q", how="left")
@@ -101,6 +106,9 @@ def _pairs(rows, split):
 
 
 def train(base="microsoft/mdeberta-v3-base", bs=64, lr=2e-5):
+    """Fine-tune cross-encoder `base` (one logit per pair, binary cross-entropy, AdamW with a one-cycle schedule,
+    1 epoch) on this side's training close calls of OUT/train_rows.parquet. Saves a checkpoint every 1,000 steps (a
+    restarted run resumes from it) and the final model to FT."""
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
     rows = pl.read_parquet(os.path.join(OUT, "train_rows.parquet")).filter(TRAIN_SEL)
@@ -178,6 +186,7 @@ class Scorer:
     """The trained transformer; call with lists of texts, returns logits. Batches are formed from texts of
     similar length (less padding), results come back in the input order."""
     def __init__(self, bs=int(os.environ.get("BER_CE_SCORE_BS", "256"))):
+        """Load the trained cross-encoder FT onto the GPU; bs pairs per scoring batch."""
         import torch
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
         self.torch, self.bs = torch, bs
@@ -186,6 +195,7 @@ class Scorer:
         self.dt = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
 
     def __call__(self, tq, ts):
+        """Logits of the text pairs (tq[i], ts[i]), returned in input order."""
         torch, bs = self.torch, self.bs
         order = np.argsort(np.array([len(a) + len(b) for a, b in zip(tq, ts)]), kind="stable")
         out = np.empty(len(tq), np.float32)
@@ -307,6 +317,8 @@ def stage3():
     tag = json.load(open(os.path.join(WORK, "models", md, "result.json")))["tag"]
 
     def add_seg(df, split_tag):
+        """With BER_S3_SEG=1, add the record's segment features (source, no address, non-Latin name, India) from
+        WORK/pairs/<split_tag>/q.parquet."""
         if not seg:
             return df
         qi = pl.read_parquet(os.path.join(WORK, "pairs", split_tag, "q.parquet")).select(

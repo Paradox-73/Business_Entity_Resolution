@@ -6,7 +6,7 @@ or addition, house number not moved up (the look-alike direction), and the gener
 
 Why (27 Sep 18:40): France rows come from our old candidate lists. Gathik v9's wider search (name max_df 20000, dense e5
 top-10) finds 7,266 France matches for records v10a leaves unmatched: acronyms ('PC' = 'Paranormal Club'), web domains
-('nantesclubsas.com'), typos, word order. US/India analog on labels (eval half, `tmp/gap/train_analog.py`): Gathik's
+('nantesclubsas.com'), typos, word order. US/India analog on labels (eval half, `france_fix/recall/train_analog.py`): Gathik's
 accepted pairs outside our lists for records we leave unmatched are 98.4% true (28,113 pairs), 98.8% under this filter,
 and each adds +0.098 / (S1 rows) macro F0.5. France checks without labels: none of the kept non-domain record names is
 all-lowercase (look-alikes 2-4%, true records 0.2-0.4%); France rows are under-matched (6.0% empty vs 5.7% US/India,
@@ -19,7 +19,7 @@ import sys
 import polars as pl
 from common import WORK, id_to_int, int_to_id, log, read_tsv
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "france_fix", "artifacts", "census"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "france_fix", "artifacts", "census"))
 from ops import ops  # noqa: E402
 
 REJECT = r"n_swap:|n_add:|n_drop:|n_legal_change|n_legal_add|a_num_up"
@@ -27,11 +27,16 @@ OUR_LISTS = ["test_scores_full_cons.parquet", os.path.join("ce_x", "test_rows.pa
 
 
 def pairs(p):
+    """(s, q) integer pairs of a matching_results.tsv."""
     return (read_tsv(p).with_columns(q_id=pl.col("matched_entity_ids").fill_null("").str.split(",")).explode("q_id")
             .filter(pl.col("q_id") != "").select(s=id_to_int("source1_entity_id").cast(pl.Int64), q=id_to_int("q_id").cast(pl.Int64)))
 
 
 def main(base_tsv, g_tsv, g_scores, out):
+    """Add to base_tsv the France pairs of the second pipeline's matching file that are outside our candidate
+    lists, for records base_tsv leaves unmatched, when the change detector (ops.py) finds no word-level or legal-form
+    change and no house number moved up, and the second pipeline's p2 >= 0.8. Writes <out>/matching_results.tsv and
+    <out>/france_recall_added.parquet."""
     s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country", "business_name", "business_address"]).select(
         s1_id="entity_id", s=id_to_int("entity_id").cast(pl.Int64), country="country", sn="business_name", sa="business_address")
     rec = pl.concat([pl.read_parquet(os.path.join(WORK, f"test_s{k}.parquet"), columns=["entity_id", "business_name", "business_address"])

@@ -15,6 +15,8 @@ from common import WORK, log, id_to_int
 
 
 def main():
+    """Write WORK/bundle_ce_x.zip: the ce_x close-call tables, and the entity_id, name and address of only the
+    records and S1 rows that appear in them."""
     src = os.path.join(WORK, "ce_x")
     stage = os.path.join(WORK, "bundle_stage", "work")
     shutil.rmtree(os.path.join(WORK, "bundle_stage"), ignore_errors=True)

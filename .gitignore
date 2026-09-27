@@ -5,13 +5,17 @@ student_resource/
 2026_official/*.mp4
 work/
 output/
+dist/
 submissions/*.tsv
 *.parquet
 *.tsv
 *.zip
+*.pkl
 # python / tools
 __pycache__/
 *.pyc
+.venv/
+venv/
 .ipynb_checkpoints/
 .env
 *.key

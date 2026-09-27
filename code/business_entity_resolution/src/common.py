@@ -23,6 +23,7 @@ def _no_power_throttling():
         from ctypes import wintypes
 
         class State(ctypes.Structure):
+            """PROCESS_POWER_THROTTLING_STATE of the Windows API."""
             _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG), ("StateMask", wintypes.ULONG)]
         k = ctypes.WinDLL("kernel32")
         st = State(1, 0x1 | 0x4, 0)             # execution speed + timer resolution: control on, throttling off
@@ -45,6 +46,7 @@ def read_tsv(path):
 
 
 def raw_path(split, k):
+    """Path of a raw challenge file: DATA/<split>/<split>_source<k>.tsv."""
     return os.path.join(DATA, split, f"{split}_source{k}.tsv")
 
 
@@ -55,6 +57,7 @@ def id_to_int(col):
 
 
 def int_to_id(col):
+    """Inverse of id_to_int: integer id -> 'S<source>-<number>'."""
     c = pl.col(col)
     return pl.format("S{}-{}", (c // SRC_MULT).cast(pl.Utf8), (c % SRC_MULT).cast(pl.Utf8))
 

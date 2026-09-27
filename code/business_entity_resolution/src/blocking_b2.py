@@ -1,8 +1,9 @@
 """Test candidate pairs with a wider combined search (name + address words): max_df 20000 and top 40 instead of
 5000 / 20. Everything else (name, address, e5 searches; all features incl. cos_comb_w with max_df 5000) is production.
 
-Why (27 Sep, measured on labelled train samples, tmp/verify-recall): the shortlist misses 1.49% of true pairs; most
-with-address misses sit at busy addresses where the top-20 combined search runs out of slots or drops common words.
+Why (27 Sep, measured on labelled train samples by analysis scripts in $BER_SCRATCH/verify-recall, not in this
+repository): the shortlist misses 1.49% of true pairs; most with-address misses sit at busy addresses where the
+top-20 combined search runs out of slots or drops common words.
 This search finds 45% of them and stage 1 ranks 94% of those first. Estimated held-out +0.0011..0.0015 (stage 2,
 transformers and stage 3 not rerun in that estimate; stage 2 now sees ~50 candidates per record instead of ~31).
 
@@ -30,7 +31,10 @@ TAG = "test_b2"
 
 
 class WideIndex(C.CountryIndex):
+    """CountryIndex whose combined name + address search uses max_df 20,000 and top 40. The features, cos_comb_w
+    included, keep the production vectoriser."""
     def __init__(self, s1, split):
+        """Production index, plus the wide combined-search vectoriser fitted on the same S1 rows."""
         super().__init__(s1, split)
         self.vcs = C._wvec(MAX_DF_COMB2)
         self.Bcs = self.vcs.fit_transform(C._comb(self.s1))
@@ -39,6 +43,8 @@ class WideIndex(C.CountryIndex):
 
 
 def build(countries):
+    """Wide build of the test pairs of `countries` into WORK/pairs/test_b2/; the chunk files of the other
+    countries are hard-linked from WORK/pairs/test/."""
     out = P.pairs_dir(TAG)
     os.makedirs(out, exist_ok=True)
     for c in ("US", "India", "France"):
@@ -53,6 +59,7 @@ def build(countries):
     # 150k (chunk files are numbered, so a resumed country must keep its size); US uses 100k.
     sizes = {"India": 150_000, "US": 100_000}
     def country_pairs(s1, q, split, on_chunk, skip=None):
+        """Replaces pipeline.country_pairs: sets the chunk size of the country, then runs the wide index."""
         C.CHUNK = sizes[s1["country"][0]]
         return C.country_pairs(s1, q, split, on_chunk, skip)
     P.country_pairs = country_pairs
@@ -60,6 +67,8 @@ def build(countries):
 
 
 def time_chunk(country, n):
+    """Time the production and the wide index on the first n test records of `country`: index build, one
+    chunk, candidates per record."""
     s1 = P.load("test", 1).filter(P.pl.col("country") == country)
     q = P.pl.concat([P.load("test", k) for k in (2, 3)]).filter(P.pl.col("country") == country).head(n)
     for cls in (C.CountryIndex, WideIndex):

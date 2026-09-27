@@ -1,0 +1,10 @@
+[   14.9s] baseline                           all 0.99205 h0 0.99203 h0US 0.99147 h0IN 0.99287 h1 0.99206 h1US 0.99153 h1IN 0.99286 US 0.99150 IN 0.99286
+[   14.9s] decide+score 10.9s
+[   41.9s] model h0: 3024279 rows, 25s
+[   71.7s]   top gain: p 1.53e+07, margin_q 9.16e+06, pg 3.24e+06, b 1.21e+05, c 2.42e+04, hn_d 8.24e+03, po 7.62e+03, op1 5.41e+03, gp1 3.98e+03, hn_abs 3.02e+03, op2 2.74e+03, d_ab 2.21e+03
+[   93.7s] model h1: 3018458 rows, 22s
+[  124.0s]   top gain: margin_q 1.65e+07, p 8.82e+06, pg 2.42e+06, b 7.92e+04, c 2.07e+04, po 1.19e+04, hn_d 7.77e+03, op1 5.55e+03, gp1 3.9e+03, hn_abs 3.06e+03, gp2 2.88e+03, d_ab 2.26e+03
+[  134.4s] stacker floor 0.5 alpha 1.0        all +19.7 h0 +21.8 h0US +23.4 h0IN +19.3 h1 +17.7 h1US +21.3 h1IN +12.2 US +22.4 IN +15.8  (x1e-5)
+[  144.9s] held-out changes: added 4285 (true 3623), removed 1291 (true 835), rows changed share 0.00496
+[  155.4s] 0.5 stacker + 0.5 p                all +12.2 h0 +12.8 h0US +12.7 h0IN +12.9 h1 +11.6 h1US +13.4 h1IN +8.9 US +13.0 IN +10.9  (x1e-5)
+[  156.1s] done

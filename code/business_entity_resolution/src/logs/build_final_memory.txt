@@ -1,0 +1,11 @@
+Peak resident memory per process during the build_final.py run of build_final.log (27 Sep 2026, laptop),
+sampled once per second by experiments/measure/peak_memory.py.
+
+  5.46 GB  stack/build_test.py
+  4.21 GB  blend_second.py $BER_BUILD/blend
+  4.19 GB  <root>/student_resource/utils/validate_submission.py (official validator)
+  3.95 GB  stack/apply_test.py _avg
+  3.71 GB  build_final.py step <name> (largest of its step processes)
+  2.12 GB  finalize.py full_cons
+  2.07 GB  check_submission.py $BER_OUT/matching_results.tsv
+  0.04 GB  build_final.py (the parent process)

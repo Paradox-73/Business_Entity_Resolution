@@ -62,6 +62,8 @@ EXT2 = ".json" if BACKEND2 == "xgb" else ".txt"
 
 
 def fit(stage, Xm, y):
+    """Train one stage-1 or stage-2 model on feature matrix Xm and labels y: XGBoost on the GPU or LightGBM
+    (BER_BACKEND for stage 1, BER_BACKEND2 for stage 2). Returns the booster."""
     if (BACKEND if stage == 1 else BACKEND2) == "xgb":
         import xgboost as xgb
         return xgb.train(XGB_PARAMS[stage], xgb.QuantileDMatrix(Xm, y), XGB_ROUNDS[stage])
@@ -69,6 +71,8 @@ def fit(stage, Xm, y):
 
 
 def score(m, Xm):
+    """Probabilities of model m (LightGBM or XGBoost) for the rows of Xm; XGBoost scores 2M rows at a time
+    to stay within 4 GB of GPU memory."""
     if isinstance(m, lgb.Booster):
         return m.predict(Xm)
     import xgboost as xgb
@@ -79,6 +83,8 @@ def score(m, Xm):
 
 
 def load_model(path_noext):
+    """Load a saved booster: <path_noext>.json (XGBoost, set to the GPU) if it exists, else <path_noext>.txt
+    (LightGBM)."""
     if os.path.exists(path_noext + ".json"):
         import xgboost as xgb
         m = xgb.Booster()
@@ -89,6 +95,7 @@ def load_model(path_noext):
 
 
 def importance(models, cols):
+    """Split gain per feature summed over `models`, as (feature, gain) pairs from largest to smallest."""
     if isinstance(models[0], lgb.Booster):
         return sorted(zip(cols, sum(m.feature_importance("gain") for m in models)), key=lambda x: -x[1])
     tot = {}
@@ -109,19 +116,25 @@ S2FEATS = ["p1", "p1_rank", "p1_margin", "s_in_cnt", "s_in_sum", "s_in_max_other
 
 
 def load(split, k, cols=None):
+    """Cleaned source file WORK/<split>_s<k>.parquet (k = 1: S1 rows; 2, 3: records), optionally only `cols`."""
     return pl.read_parquet(os.path.join(WORK, f"{split}_s{k}.parquet"), columns=cols)
 
 
 def crc(x):
+    """zlib.crc32 of an id string. For an S1 row, crc % 1000 < 500 marks the held-out half and crc % 3 its fold."""
     return zlib.crc32(x.encode())
 
 
 def pairs_dir(tag):
+    """Folder of the pair-feature chunk files of one build: WORK/pairs/<tag>."""
     return os.path.join(WORK, "pairs", tag)
 
 
 # ---------------------------------------------------------------- build
 def build(split, tag, frac=None):
+    """Blocking and the 55 pair features for one split. Writes WORK/pairs/<tag>/s1.parquet, q.parquet and one
+    <country>_<chunk>.parquet per chunk of records. frac (e.g. 0.1) keeps that share of the S1 rows with their true records,
+    plus the same share of unmatched records. Countries marked done and chunk files already on disk are skipped."""
     out = pairs_dir(tag)
     os.makedirs(out, exist_ok=True)
     s1 = load(split, 1)
@@ -145,6 +158,7 @@ def build(split, tag, frac=None):
         log(f"country {c}")
 
         def on_chunk(p, i):
+            """Save chunk i of the current country: integer ids q, s and the float32 features."""
             p = (p.with_columns(q=id_to_int("entity_id"), s=id_to_int("entity_id_s"))
                   .select(["q", "s"] + [pl.col(f).cast(pl.Float32) for f in FEATURES]))
             p.write_parquet(os.path.join(out, f"{c}_{i:03d}.parquet"))
@@ -155,6 +169,7 @@ def build(split, tag, frac=None):
 
 
 def chunk_files(tag):
+    """Sorted paths of the pair-feature chunk files of WORK/pairs/<tag>."""
     return sorted(f for f in glob.glob(os.path.join(pairs_dir(tag), "*_*.parquet")))
 
 
@@ -170,6 +185,9 @@ def train_meta(tag):
 
 
 def attach(p, qmap, rate=None):
+    """Add to pairs p: label (s is the record's true S1 row), fold (fold of the true S1 row; q % 3 for unmatched
+    records) and eligible (the true S1 row is in the held-out half, or the record has none). With rate, keep only
+    eligible records, sampled at that rate."""
     p = (p.join(qmap, on="q", how="left")
           .with_columns(label=(pl.col("true_s") == pl.col("s")).fill_null(False),
                         fold=pl.coalesce("qfold", (pl.col("q") % N_FOLDS).cast(pl.Int8)),
@@ -180,6 +198,8 @@ def attach(p, qmap, rate=None):
 
 
 def sample1(p, qmap, hard_rate, rand_rate):
+    """Stage-1 training rows of one chunk: every eligible true pair, hard negatives (rank <= 2 by name cosine or
+    address token-set, or name token-set >= 80) at hard_rate, and other rows at rand_rate."""
     p = attach(p, qmap)
     h = pl.struct("q", "s").hash(seed=3) % 10000
     hard = (pl.col("cos_name_rank") <= 2) | (pl.col("a_tset_rank") <= 2) | (pl.col("n_tset") >= 80)
@@ -188,6 +208,7 @@ def sample1(p, qmap, hard_rate, rand_rate):
 
 
 def X(df, cols):
+    """Columns `cols` of df as a float32 numpy matrix (model input)."""
     return df.select([pl.col(c).cast(pl.Float32) for c in cols]).to_numpy()
 
 
@@ -321,6 +342,8 @@ def decide_expf(b, prob, floor, alpha):
 
 
 def apply_decision(b, prob, dec, qinfo):
+    """Matches (s, q) from probability column `prob` with a saved rule: expected-F0.5 sets (dec type 'expf')
+    or thresholds (type 'thr', one value or one per segment)."""
     if dec["type"] == "expf":
         return decide_expf(b, prob, dec["floor"], dec["alpha"])
     return decide(b, prob, dec["t"], qinfo)
@@ -345,6 +368,7 @@ def tune(b, prob, truth, s1e, qinfo):
     bb = b.filter(pl.col("s").is_in(list(evalset)) | pl.col("q").is_in(truth["q"].to_list()))
 
     def score(thr):
+        """Held-out macro F0.5 of the threshold rule `thr` (one value or a per-segment dict)."""
         return macro_f05_df(decide(bb, prob, thr, qinfo), truth, s1e)
 
     gs = {t: score(t) for t in grid}
@@ -398,6 +422,10 @@ def train(tag, variant=""):
 
 def stage1(files, qmap, rate, s1e, te, qinfo, md):
     # ---- stage 1: training sample
+    """Stage 1: trains 3 fold models (and, for LightGBM, one model on the whole sample) on the sampled pairs,
+    scores every pair out-of-fold, keeps each record's top candidates (topk) and tunes a threshold on the held-out half.
+    Writes s1_f<k>, s1_full, stage1_base.parquet and stage1.json to md; returns the top-candidate table, the fold models
+    and the recall and score figures."""
     parts = [sample1(pl.read_parquet(f), qmap, *rate) for f in files]
     S = pl.concat(parts)
     del parts
@@ -448,6 +476,9 @@ def stage1(files, qmap, rate, s1e, te, qinfo, md):
 
 def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1, sc1, variant="", md1=None):
     # ---- stage 2
+    """Stage 2 on the stage-1 top candidates B: adds the S1-side competition features (and the sibling /
+    consensus features for variant 'sib' / 'cons'), trains 3 fold models, scores out-of-fold and tunes the decision rule.
+    Writes s2_f<k>, result.json (features, rule, scores) and oof.parquet (q, s, p1, p2, label, fold) to md."""
     B = stage2_features(B, qinfo)
     cols2 = FEATURES1 + S2FEATS
     if variant in ("sib", "cons"):
@@ -501,9 +532,13 @@ def train_stage2(tag, B, models1, found, npairs, nq, te, s1e, qinfo, md, g1, gs1
 
 # ---------------------------------------------------------------- predict
 def predict(model_tag, test_tag):
+    """Score every test pair of WORK/pairs/<test_tag> with the saved models of WORK/models/<model_tag>.
+    Writes WORK/test_scores_<model_tag>[_<test_tag>].parquet (q, s, p1, p2) and, in BER_OUT, matching_results.tsv (saved
+    rule) and candidate_pairs.tsv (every searched pair). Stage-1 test scores are cached in WORK/test_base_*.parquet."""
     md = os.path.join(WORK, "models", model_tag)
     res = json.load(open(os.path.join(md, "result.json")))
     def models(stage):
+        """Saved models of one stage: the full-sample model if it exists, else the 3 fold models (averaged later)."""
         d = res.get("stage1_dir", md) if stage == 1 else md
         full = os.path.join(d, f"s{stage}_full")
         if os.path.exists(full + ".json") or os.path.exists(full + ".txt"):

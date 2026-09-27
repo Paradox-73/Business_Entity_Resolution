@@ -31,7 +31,7 @@ BER_DLX_S1=40000 BER_DLX_TRAIN=240000 python dl_matcher_exp.py   # ~45 min; then
 ```
 Long jobs run inside `tmux` (`tmux new -s <name>`), so a dropped ssh connection does not stop them.
 
-## v8 / v9 submission builds (drivers in `code/business_entity_resolution/server/`, copied to `~/ber` on the server)
+## v8 / v9 submission builds (drivers in `code/business_entity_resolution/src/runners/`, copied to `~/ber` on the server)
 - `run_v8.sh`: smoke test, then `v8.py train | gbdt | test | ce | final` with retries -> `~/ber/out/v8a`, `~/ber/out/v8b` (France variants). `run_v8_resume.sh` + `v8_guard.sh` resume it (10 tries per step) whenever the driver dies before `w/v8/summary.json` exists.
 - `run_v9.sh`: FULL rebuild with the v8 blocking (train + test pairs on disk, ~60 GB), `pipeline.py train full cons`, `predict`, `rerank.py select`, `ce_folds.py` (bge-reranker-v2-m3, 1M rows per fold), `rerank.py stage3`, `fr_minrule.py`, `finalize.py` (legal veto) -> `~/ber/out/v9/` incl. candidate_pairs.tsv. `v9_after_v8.sh` starts it only after v8 finished (one heavy job at a time).
 - `watchdog.sh`: stops our (restartable) test build if free RAM drops below 6 GB, so the kernel OOM killer never picks another user's job.

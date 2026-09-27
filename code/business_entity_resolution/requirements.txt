@@ -30,11 +30,11 @@ huggingface_hub==1.32.0
 protobuf==7.36.2
 
 # Other machines (versions as recorded in the runbooks; not installed on the laptop):
-# - Friend 2 workstation (Ubuntu, RTX A6000 48 GB; bge-reranker-v2-m3 folds):
+# - Bhavya's workstation (Ubuntu, RTX A6000 48 GB; README steps 12, 14b, 21):
 #     pip install torch  (PyPI CUDA 12 wheel)  "transformers>=4.44" polars pyarrow numpy sentencepiece protobuf scikit-learn
 #   exact versions were not recorded.
-# - Lab GPU server (Rocky Linux 8, RTX PRO 6000 Blackwell 96 GB; v8.py):
+# - Lab GPU server (Rocky Linux 8, RTX PRO 6000 Blackwell 96 GB; README steps 17 and 21, experiments/v8.py):
 #     torch==2.8.0 (PyPI wheel, CUDA 12.8, needed for sm_120) polars==1.44.2 lightgbm==4.7.0 rapidfuzz==3.14.6
 #     sparse_dot_topn==1.2.0 transformers==5.17.0 xgboost sentencepiece protobuf numpy scipy scikit-learn pyarrow
 # - sentencepiece is not needed on the laptop: every model used ships a fast tokenizer (tokenizer.json).
-# - faiss is imported only by the experiment script src/dense_blocking_exp.py (not part of the final pipeline).
+# - faiss is imported only by the experiment script src/experiments/dense_blocking_exp.py (not part of the final pipeline).

@@ -15,6 +15,8 @@ from common import WORK, log, id_to_int
 
 
 def main(ce_path, gb_path, out):
+    """Write `out` (q, s, p1, p2) from the reranked scores: France p2 = min(reranked p2, GBDT p2), with GBDT
+    p2 = 0 for pairs the GBDT never scored; US/India rows unchanged."""
     s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
         s=id_to_int("entity_id"), country="country")
     ce = pl.read_parquet(ce_path, columns=["q", "s", "p1", "p2"]).with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))

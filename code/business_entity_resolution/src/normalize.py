@@ -30,10 +30,13 @@ def _ascii_lower(e):
 
 
 def _squash(e):
+    """Collapse runs of whitespace to one space and trim."""
     return e.str.replace_all(r"\s+", " ").str.strip_chars()
 
 
 def name_exprs(col="business_name"):
+    """Polars expressions of the cleaned name columns: name_full, name_core (legal forms and titles removed),
+    name_ns (core without spaces) and the flags name_is_domain, name_has_alias, name_nonlatin."""
     raw = pl.col(col).fill_null("")
     low = _ascii_lower(pl.col(col)).str.strip_chars()
     is_domain = low.str.contains(_DOMAIN)
@@ -70,6 +73,9 @@ def _ordinals(e):
 
 
 def addr_exprs(script_map=None, abbrev_map=None, col="business_address"):
+    """Polars expressions of the cleaned address columns: addr (local-script phrases mapped, accents and junk
+    tokens removed, short forms expanded with the learned map), addr_nums (numbers without leading zeros) and the flags
+    addr_missing, addr_nonlatin. With BER_V8=1 also the India state codes and the ordinals."""
     raw = pl.col(col).fill_null("")
     x = raw.str.to_lowercase()
     if script_map:
@@ -119,6 +125,8 @@ def _fr_acronyms(e):
 
 
 def fr_name_exprs(col="business_name"):
+    """As name_exprs, with French rules: dotted legal forms joined; French legal forms and articles also
+    removed from name_core. Used only by 'prep.py france' (v6; not in the final file)."""
     raw = pl.col(col).fill_null("")
     low = _fr_acronyms(_ascii_lower(pl.col(col)).str.strip_chars())
     is_domain = low.str.contains(_DOMAIN)
@@ -141,6 +149,8 @@ def fr_name_exprs(col="business_name"):
 
 
 def fr_addr_exprs(col="business_address"):
+    """As addr_exprs, with French rules: street abbreviations expanded, region / departement names and
+    articles dropped, no learned map. Used only by 'prep.py france' (v6; not in the final file)."""
     raw = pl.col(col).fill_null("")
     x = _ascii_lower(pl.col(col)).str.replace_all(_NONLATIN, " ")
     x = _squash(x.str.replace_all(r"[^a-z0-9]+", " ").str.replace_all(_JUNK, " "))
@@ -158,6 +168,7 @@ def fr_addr_exprs(col="business_address"):
 
 
 def normalize(df, script_map=None, abbrev_map=None, french=False):
+    """df with the cleaned name and address columns added (French rules when french=True)."""
     if french:
         return df.with_columns(fr_name_exprs() + fr_addr_exprs())
     return df.with_columns(name_exprs() + addr_exprs(script_map, abbrev_map))

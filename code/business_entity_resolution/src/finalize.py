@@ -1,4 +1,4 @@
-"""Write matching_results.tsv from saved test scores with the calibrated per-country decision (calib.py).
+"""Write matching_results.tsv from saved test scores with the calibrated per-country decision (experiments/calib.py).
 
   python finalize.py <model_dir_name> <out_dir> <scores.parquet>[:<countries>] [...]
   e.g. finalize.py tlike_xgb_cons out_v6 E:/.../test_scores_tlike_xgb_cons.parquet:US,India E:/.../test_scores_tlike_xgb_cons_testfr.parquet:France
@@ -43,6 +43,8 @@ if cal.get("x"):
 FR_FORMS = ["sarl", "sas", "sasu", "sa", "eurl", "sci", "snc", "ei", "eirl", "selarl", "scp", "gie", "earl"]
 if os.environ.get("BER_FR_LEGAL_VETO") == "1":
     def forms(split_files):
+        """France rows of the given cleaned source files: integer id and the set of legal forms (FR_FORMS) in the
+        raw name, with accents removed and dotted forms joined."""
         d = pl.concat([pl.read_parquet(f, columns=["entity_id", "business_name", "country"]) for f in split_files])
         d = d.filter(pl.col("country") == "France")
         t = (d["business_name"].fill_null("").str.normalize("NFKD").str.replace_all(r"\p{M}", "").str.to_lowercase()

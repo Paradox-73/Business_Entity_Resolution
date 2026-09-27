@@ -24,7 +24,7 @@ pip install "transformers>=4.44" polars pyarrow numpy sentencepiece protobuf
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"   # must print True and the RTX 4060
 ```
 
-Kavya sends `bundle_ce_x.zip` (329 MB) separately — it is data, so it is never in git. Unzip it **in the repo root** (it creates `work/…`):
+Kanav sends `bundle_ce_x.zip` (329 MB) separately — it is data, so it is never in git. Unzip it **in the repo root** (it creates `work/…`):
 
 ```bash
 # Windows PowerShell:  Expand-Archive bundle_ce_x.zip -DestinationPath .
@@ -42,7 +42,7 @@ cd code/business_entity_resolution/src
 python ce_folds.py --model intfloat/multilingual-e5-base --name base --smoke
 ```
 
-It must end with `DONE. Send back: …_smoke.parquet`. If it fails, send Kavya the file `work/ce_folds_base_smoke.log` and the logs `work/ce_folds_base_*.log`.
+It must end with `DONE. Send back: …_smoke.parquet`. If it fails, send Kanav the file `work/ce_folds_base_smoke.log` and the logs `work/ce_folds_base_*.log`.
 
 ## 3. Full run (~5–6 h)
 
@@ -65,7 +65,7 @@ work/ce_x/train_ce_basef1.parquet   work/ce_x/test_ce_basef1.parquet
 work/ce_x/train_ce_basef2.parquet   work/ce_x/test_ce_basef2.parquet
 ```
 
-Send each fold's two files as soon as that fold is done (the log says `OK score fold k`), so Kavya can start checking early. Do not commit anything to git.
+Send each fold's two files as soon as that fold is done (the log says `OK score fold k`), so Kanav can start checking early. Do not commit anything to git.
 
 ## 5. Only if the base run finished and more than 10 h remain before Sun 27 Sep 18:00
 
@@ -79,7 +79,7 @@ Send back the same 6 files with `large` instead of `base`.
 
 ---
 
-## What Kavya's laptop does with the files (for reference)
+## What Kanav's laptop does with the files (for reference)
 
 ```bash
 cd code/business_entity_resolution/src

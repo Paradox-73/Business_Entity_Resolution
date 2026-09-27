@@ -19,7 +19,7 @@ pip install "transformers>=4.44" polars pyarrow numpy sentencepiece protobuf sci
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"   # True, NVIDIA RTX A6000
 ```
 
-Kavya sends `bundle_ce_x.zip` (329 MB; data, so never in git). Unzip it **in the repo root**:
+Kanav sends `bundle_ce_x.zip` (329 MB; data, so never in git). Unzip it **in the repo root**:
 
 ```bash
 unzip bundle_ce_x.zip        # creates work/train_s1.parquet ... work/ce_x/train_rows.parquet
@@ -38,7 +38,7 @@ cd code/business_entity_resolution/src
 python ce_folds.py --model BAAI/bge-reranker-v2-m3 --name bge --smoke --no-freeze --batch 32 --lr 2e-5 --score-batch 512
 ```
 
-It must end with `DONE. Send back: …_smoke.parquet`. If not, send Kavya `work/ce_folds_bge_smoke.log` and `work/ce_folds_bge_*.log`.
+It must end with `DONE. Send back: …_smoke.parquet`. If not, send Kanav `work/ce_folds_bge_smoke.log` and `work/ce_folds_bge_*.log`.
 
 ## 3. Full run
 
@@ -53,7 +53,7 @@ python ce_folds.py --model BAAI/bge-reranker-v2-m3 --name bge --no-freeze --batc
 
 ## 4. Send back — after EACH model, not only at the end
 
-When the log says `OK score fold 0`, send these two files right away (Kavya checks model 0 while models 1 and 2 train):
+When the log says `OK score fold 0`, send these two files right away (Kanav checks model 0 while models 1 and 2 train):
 
 ```
 work/ce_x/train_ce_bgef0.parquet   work/ce_x/test_ce_bgef0.parquet
@@ -73,7 +73,7 @@ Send back the `largef0..2` files the same way.
 
 ---
 
-## What Kavya's laptop does with the files
+## What Kanav's laptop does with the files
 
 ```bash
 cd code/business_entity_resolution/src

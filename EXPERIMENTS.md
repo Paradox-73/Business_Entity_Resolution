@@ -16,7 +16,7 @@ CV = macro F0.5 on out-of-fold predictions. Never compare scores from different 
 | 1   | 25 Sep 01:30 | S10   | LightGBM, 40 features, TF-IDF max_df 5%/2% (relative)                   | 0.9870         | **0.9786** | Good, but test run stalled on US: relative max_df lets common 3-grams hit ~30k S1 rows each             |
 | 2   | 25 Sep 02:00 | S10   | TF-IDF max_df absolute 4000/2000 docs (speed fix)                       | 0.9869         | 0.9753     | Test run 65 min. **Submitted file v1.** Lost 0.003 because the cosine features also lost common 3-grams |
 
-## Error analysis of run 2 (S10 OOF, 25 Sep 04:00) — `src/error_analysis.py`, log `work/errors_v1.log`
+## Error analysis of run 2 (S10 OOF, 25 Sep 04:00) — `src/experiments/error_analysis.py`, log `work/errors_v1.log`
 
 Score 0.9771 at t=0.75 (re-trained OOF). Points lost if each mistake type were fixed:
 
@@ -71,7 +71,7 @@ Build: 42 chunks, ~100–130 s each (~85 min), 9.1 GB of features on disk.
 
 **Root cause (exp 7):** the absolute 3-gram df caps (4000 name / 2000 address) introduced in run 2 for speed are 10x more aggressive at full density than on S10: at 1.3M US S1 rows, every city/street 3-gram exceeds 2000 docs and is dropped. S10 validation hid this (its S1 index is 10x smaller). **Test has full density (US 663k, India 810k S1), so v1 on test was also hurt.** Lesson: validate blocking at the same S1 density as test.
 
-### Blocking at full density (`src/blocking_exp.py`, 50k held-out US rows vs all 1.32M US S1)
+### Blocking at full density (`src/experiments/blocking_exp.py`, 50k held-out US rows vs all 1.32M US S1)
 
 | Search                                                                | Recall                                                                                                    | Search time / 50k rows |
 | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------- |
@@ -136,7 +136,7 @@ Next ideas, ranked by expected gain / cost:
 
 Implications: (1) the look-alike share is the main measurable difference; (2) US density differs; (3) France does not look worse than the others on any measurable statistic.
 
-### Fable review checks (25 Sep 19:10)
+### Review checks (25 Sep 19:10)
 
 - Check 3, ID leak: Spearman(S1 id number, matched id number) = 0.0003; sibling S2 ids are ~165M apart (median). No leak.
 - Check 5, per-source cap: matches per (S1, source) = 1: 1.51M, 2: 1.32M, 3: 0.71M, 4: 0.26M, 5: 59.5k, 6: 2.8k. No useful cap.
@@ -267,9 +267,9 @@ Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (
 - Same-name S1 with the record's exact address while another S1 was chosen: 3 cases in US train, 0-5 in France test -> not a France error source.
 - **Live hypothesis (19:20):** France rejects number-changed true records. v7ens France acceptance of best candidates: same name + other number 20.6%, word swapped + other number 1.0%, word added + other number 0.1%; US true rates 42.7% / 16.1% / 6.0%. `france_cal.py ndiff` adds (highest probability first, never vetoed pairs) halfway to the US rates: **v7j** +21,155 France records = 881.9k (= expected ~882k); v7j_full +42,309. Only France differs from v7ens, so LB change / 0.15 = France change.
 
-**26 Sep 15:00, next design (3-fold transformers):** fold side k trains on all close calls whose record is in another pipeline fold (incl. "mixed" records and stage-1 ranks 3-5): 1.68M pairs per model vs 0.83M per half-model, and every close call gets an out-of-fold score. Laptop: e5-small (`ce_folds.py --name small`); RTX 4060: e5-base (`docs/FRIEND_RUN.md`). Stage 3 prints the "halves protocol" score (mixed records keep GBDT p2), comparable with v7ens 0.98813.
+**26 Sep 15:00, next design (3-fold transformers):** fold side k trains on all close calls whose record is in another pipeline fold (incl. "mixed" records and stage-1 ranks 3-5): 1.68M pairs per model vs 0.83M per half-model, and every close call gets an out-of-fold score. Laptop: e5-small (`ce_folds.py --name small`); RTX 4060: e5-base (`docs/runbooks/FRIEND_RUN.md`). Stage 3 prints the "halves protocol" score (mixed records keep GBDT p2), comparable with v7ens 0.98813.
 
-- **Early check 16:30** (`work/cmp_fold0.py`): e5-small fold-0 model vs transformer A (v7ens) on the SAME 280,159 held-out pairs (eval group, fold 0, neither trained on them): AUC 0.98865 -> **0.99113**, log loss 0.13020 -> **0.11716**, best candidate is the true S1 0.98568 -> **0.98657**. Same model size, so the gain is the 3-fold design (2x data, mixed records, ranks 3-5). Green light for the e5-base run.
+- **Early check 16:30** (`src/experiments/cmp_fold0.py`): e5-small fold-0 model vs transformer A (v7ens) on the SAME 280,159 held-out pairs (eval group, fold 0, neither trained on them): AUC 0.98865 -> **0.99113**, log loss 0.13020 -> **0.11716**, best candidate is the true S1 0.98568 -> **0.98657**. Same model size, so the gain is the 3-fold design (2x data, mixed records, ranks 3-5). Green light for the e5-base run.
 
 **Transformer at test-like density (tl2, `rerank.py check`, side A only, stage 3 fitted on FULL rows of other folds; 26 Sep 05:40):**
 | Base | tl2 GBDT | tl2 + transformer | US | India |
@@ -395,7 +395,7 @@ Same held-out pairs (labelled close calls whose record is in fold k; no compared
 | 1 (551k)       | 0.98891 / 0.98576 | 0.99144 / 0.98653     | 0.99081 / 0.98655   | **0.99206 / 0.98679**     |
 | 2 (551k)       | 0.98830 / 0.98568 | 0.99084 / 0.98676     | 0.98994 / 0.98639   | **0.99141 / 0.98687**     |
 
-Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_combo.sh`):
+Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `src/runners/build_combo.sh`):
 
 | version       | what                                                                   | halves                                 | all close calls rescored |
 | ------------- | ---------------------------------------------------------------------- | -------------------------------------- | ------------------------ |
@@ -410,7 +410,7 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 - **Uploaded 26 Sep ~23:30: v7g_num** (last upload of the day). LB - 0.983159 = 0.85 x US/India change (held-out +0.00032) + 0.15 x France change (new transformer's France lowering + number veto). Clean France split: upload `out_v7g` (same file without the veto).
 - Friend 1's e5-base (800k rows) ranks below e5-small (all rows) on every fold: capping rows costs more than the bigger model gains. Friend 2 (A6000) trains bge-reranker-v2-m3 on all 1.68M rows, ~2.1 steps/s while another job (`xenc.py`) shared the card, 4.3 steps/s alone.
 
-### v8: streamed full test build on the lab GPU server (27 Sep 01:30-08:35 IST; `v8.py`, drivers in `code/business_entity_resolution/server/`)
+### v8: streamed full test build on the lab GPU server (27 Sep 01:30-08:35 IST; `v8.py`, drivers in `code/business_entity_resolution/src/runners/`)
 
 Pipeline (`BER_V8=1`): audited blocking + cleaning -> stage-1 GBDT (XGBoost depth 10, 600 rounds, 3 folds by true S1) trained on 8% of the eligible train records (US 310,637 + India 208,929 records; 20.8M pairs) -> every test record scored chunk by chunk, top-5 kept (no pair-feature files: the shared disk cannot hold them) -> close calls (best p1 in [0.01, 0.995] or 2nd p1 >= 0.2; train 185,387 records, **test 3,684,716 records = 37%**, 7.37M pairs) -> 3 fold cross-encoders (bge-reranker-v2-m3, fully fine-tuned, ~248k close-call pairs each, 10 steps/s; each scored its fold out-of-fold and all 7.37M test pairs, ~53 min per fold) -> stack XGBoost [p1, mean logit, margins, ranks, n_cc] -> expF floor 0.5 (v7ens's rule).
 
@@ -449,29 +449,29 @@ Test file (`submissions/v9`): expF 0.5 (chosen on held-out), France min rule (19
 | v7r: e5-small + bge + e5-large, equal | 0.98946 |
 | v7r2: bge 0.7 + e5-large 0.3 (rule thr 0.7) | 0.98954 |
 
-**Decision:** not used. +0.00004 at best, chosen on the same held-out rows, and about +0.00002 after the 0.6/0.4 blend with the second pipeline.
+**Decision:** not used. +0.00004 at best, chosen on the same held-out rows, and about +0.00002 after the 0.6/0.4 blend with the second pipeline. Later (v10d, 27 Sep 20:50): its stage-3 probability is feature `c` of the US/India stacker (0.08% of the stacker's split gain).
 
-### France recall from the second generator (27 Sep 18:40 IST; v10b)
+### France recall from the second pipeline (27 Sep 18:40 IST; v10b)
 
-Held-out loss of the v10a-like blend (0.99205, `france_fix/recall/decomp.py`): 0.0080 in total; records without an address 0.0060 of it (not in any list 0.00285, best S1 another 0.00158, rejected 0.00153). Gathik v9's France matches outside our France lists, for records v10a leaves unmatched: 7,266. The same kind of pair on US/India labels (eval half): 28,113 pairs, 98.4% true; without word-level name change, legal-form change/addition or house number moved up: 98.8% true, +0.098 row-F each. France keeps 4,825 (gathik p >= 0.8); 0 of the non-domain names are all-lowercase. Expected France +0.0018, LB +0.00027. Built as v10b (`src/france_recall.py`). **Public LB 0.990475 (+0.000309 vs v10a, France +0.00206)**: the addition was worth slightly more than the labelled analog predicted.
+Held-out loss of the v10a-like blend (0.99205, `src/france_fix/recall/decomp.py`): 0.0080 in total; records without an address 0.0060 of it (not in any list 0.00285, best S1 another 0.00158, rejected 0.00153). Gathik v9's France matches outside our France lists, for records v10a leaves unmatched: 7,266. The same kind of pair on US/India labels (eval half): 28,113 pairs, 98.4% true; without word-level name change, legal-form change/addition or house number moved up: 98.8% true, +0.098 row-F each. France keeps 4,825 (gathik p >= 0.8); 0 of the non-domain names are all-lowercase. Expected France +0.0018, LB +0.00027. Built as v10b (`src/france_recall.py`). **Public LB 0.990475 (+0.000309 vs v10a, France +0.00206)**: the addition was worth slightly more than the labelled analog predicted.
 
-### Final-upload hunt (27 Sep 19:55-20:30 IST; scripts in `france_fix/final_hunt/`)
+### Final-upload hunt (27 Sep 19:55-20:30 IST; scripts in `src/france_fix/final_hunt/`)
 
-Three hunts for France/US-India additions after v10b, each proposal checked by an adversarial verifier:
+Three hunts for France/US-India additions after v10b, each proposal then checked by a separate attempt to refute it:
 
 | Hunt | Result |
 | --- | --- |
 | France pairs both pipelines scored, only Gathik's accepted (committee) | no set: US/India labelled analog 69.6% true; France descriptor classes ~0-10% true |
-| The 2,441 second-generator France pairs left out of v10b | noise-word swaps refuted (lowercase test is blind to this class; in-list analog fit 0.77-0.81); garbled-word typos kept (416 of 532, letters shared with the S1 word; t ~0.96); '&' -> 'et'/'+' kept (88) |
-| New same-address generator (same house number and street words, name differs only by acronym/domain/typo-free noise, one S1) | train 651 pairs 99.85% true (+0.109/N each); France 693 refuted as a whole (acronyms can hide a same-initial descriptor swap), safe subset 298 kept; US/India only 62 pairs left |
+| The 2,441 second-pipeline France pairs left out of v10b | noise-word swaps refuted (lowercase test is blind to this class; in-list analog fit 0.77-0.81); garbled-word typos kept (416 of 532, letters shared with the S1 word; t ~0.96); '&' -> 'et'/'+' kept (88) |
+| New same-address rule (same house number and street words, name differs only by acronym/domain/typo-free noise, one S1) | train 651 pairs 99.85% true (+0.109/N each); France 693 refuted as a whole (acronyms can hide a same-initial descriptor swap), safe subset 298 kept; US/India only 62 pairs left |
 
 Built as v10c = v10b + 802 France pairs (`src/apply_pair_sets.py`, sets in `work/final_sets/`); only France rows gain; expected LB +0.00003..0.00005; validator PASS.
 
-### Second final-upload hunt (27 Sep 20:25-20:50 IST; `final_stack/`, `france_fix/final_hunt/fr-strong-veto/`)
+### Second final-upload hunt (27 Sep 20:25-20:50 IST; `src/stack/`, `src/france_fix/final_hunt/fr-strong-veto/`)
 
 | Hunt | Result |
 | --- | --- |
-| US/India LightGBM stacker over both pipelines' per-pair features, cross-fitted by S1 halves, mean of 4 models | held-out **+0.000209** vs the v10a blend (0.99205 -> 0.99226; halves +0.000216 / +0.000202, US +0.000226, India +0.000184; ~13 standard errors); added pairs 84.6% true, removals 43% false; verifier: not refuted |
+| US/India LightGBM stacker over both pipelines' per-pair features, cross-fitted by S1 halves, mean of 4 models | held-out **+0.000209** vs the v10a blend (0.99205 -> 0.99226; halves +0.000216 / +0.000202, US +0.000226, India +0.000184; ~13 standard errors); added pairs 84.6% true, removals 43% false; refutation attempt: not refuted |
 | France vetoes where both bge families score low | 13,092 candidates refuted: 83% are 'X <descriptor> SARL' -> '... Développement/Groupe/& Associés', which the US-trained models treat as look-alikes but the v9z leaderboard result shows ~90% true; only 256 'same name and number, completely different street' pairs kept (US/India analog 1/87 true) |
 
 Built as **v10d** = v10c + stacker US/India (US +3,733 / -841, India +3,288 / -434 pairs) - 256 France pairs; expected LB ~0.99067; validator PASS. Final upload: **public LB 0.990565** (+0.00009 vs v10b, about 45% of the expected gain; first change whose held-out gain did not transfer in full).

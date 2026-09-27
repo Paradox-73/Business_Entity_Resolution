@@ -417,6 +417,14 @@ Pipeline (`BER_V8=1`): audited blocking + cleaning -> stage-1 GBDT (XGBoost dept
 - Not validated at FULL density and no stage 2 (group features need every train record): v8 changes blocking, model and France handling at once versus v7ens, so its LB score cannot be attributed to one change. v8b vs v8a isolates the transformer's France effect on this pipeline.
 - Run log: the kernel OOM killer stopped the test step 3 times (another user's job with many 12 GB data-loader workers) and the server was unreachable twice for 40-50 min (load 137-196); a guardian (`v8_guard.sh`) resumed from saved chunks, and test chunks are now scored in 50k-record sub-chunks (`BER_V8_SUB`) to halve peak RAM.
 - **v9** (FULL rebuild with the v8 blocking -> `pipeline.py train full cons` -> 3-fold bge on close calls -> stage 3 -> France rules; comparable with v7ens/v7g on the halves protocol, writes candidate_pairs.tsv) started 27 Sep 08:36 IST after v8, runs serialised to protect the shared server (`run_v9.sh`).
+- **v9 GBDT results, same FULL protocol as every earlier run (eval-half S1, full density, `pipeline.py train full cons`):**
+
+| | recall ceiling | stage 1 OOF | stage 2 OOF (thr) | stage 2 + expF (best rule) |
+|---|---|---|---|---|
+| production blocking (run 9 / `full_cons`) | 0.9851 | 0.9724 | 0.9788 (base) | **0.98151** |
+| v8 blocking + cleaning (v9) | **0.9963** | **0.9753** | 0.9844 | **0.98472 (+0.0032)** |
+
+  417.5M train pairs (40.5 per record vs ~31). The blocking/cleaning audit is worth +0.0032 before any transformer; the transformer stage (bge 3-fold) follows.
 
 ## Lessons (read before changing anything)
 

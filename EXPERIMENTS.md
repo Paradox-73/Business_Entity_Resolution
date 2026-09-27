@@ -451,6 +451,19 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 - Refuted: an LB-calibrated logistic re-decision (the 4 LB points cannot fix its sign). No change from 'twin S1' analysis (twin decoys already rejected).
 - Files: v9a (v7ens + veto), v9b (+ additions), v9c (v7p + veto), v9d (v7p + veto + additions). Scripts: code/business_entity_resolution/france_fix/.
 
+### Generator census + France hunts (workflow france-artifacts, 27 Sep 13:00-14:05)
+
+- Census on US/India labels (usi_top, 1.09M best candidates; ops detector `france_fix/artifacts/census/ops.py`):
+  - **Decoy = a name change + house number moved UP** (US decoys: +1 7.3%, +2..5 29%, +6..20 30%, >20 15%; true pairs ~0.3% per band; DOWN moves equal in true and decoys). US decoy name changes: word added 49%, swapped 32%, legal form changed 20% / added 20%; only 989 of 164k US decoys have no name change.
+  - **A true record gets at most ONE name change** (e.g. legal form added + lowercase: 0 true of 1,396 expected vs 897/1,103 decoys; noise word added + lowercase 0/133 vs 1,244/1,174).
+  - Only-true changes: address missing (3.3% vs 0.6%), house number missing (8.1% vs 0.7%), web-domain name (5.5% vs 0.65%), spaces removed, 'trading as', number suffix (25/7), dot after number.
+  - US/India: remaining model mistakes are almost all 'address missing' wrong-S1 cases; the artifact rules add little there.
+  - US descriptor added/swapped at the same number is TRUE noise (1,387 true / 1 false; 98.3%) - the France descriptor veto is France-specific.
+- France false-accept veto on v9b: 1,145 pairs (tier A 846: legal form added + number up 1-20, lowercase 29 observed vs 28 if all fake, and only 131 'down' mirrors -> ~0 true). Predicted France +0.0007.
+- France missed-true additions: 4,150 same-address single-change copies the transformer lowered (lowercase test ~0.9 true; realism factor from v9b's LB-fit -> ~0.75-0.8, near break-even). Predicted France +0.001 (range -0.0006..+0.0014).
+- Files: v9e = v9d + veto; v9f = v9e + additions; v9g = v7ens + v9f France.
+- Mistake caught: the splice_country.py argument order in the workflow prompts was reversed (main, donor, out); all built files verified: US/India identical to the main file, France pair counts as intended.
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.

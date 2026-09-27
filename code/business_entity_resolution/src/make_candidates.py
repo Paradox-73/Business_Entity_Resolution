@@ -4,7 +4,7 @@ plus the stage-1 ranks 3-5 of close-call records that the transformers score (re
 the final stage-3 score file; plus, optionally, pairs from a second candidate generator (Gathik's v8 blocking) that the
 final file matched. Checks that every matched pair of the submission is a candidate.
 
-  python make_candidates.py <final_scores.parquet> <matching_results.tsv> <out_dir> [extra_pairs.tsv ...]
+  python make_candidates.py <final_scores.parquet> <matching_results.tsv> <out_dir> [extra_pairs.tsv|.parquet ...]
 e.g. python make_candidates.py work/test_scores_blend_v7p.parquet submissions/v9y/matching_results.tsv work/out_cand
                                work/gathik/v8_matching_results.tsv
 """
@@ -15,6 +15,8 @@ from common import WORK, id_to_int, int_to_id, log
 
 
 def pairs(p):
+    if p.endswith(".parquet"):   # a pair set (s, q) from another generator, e.g. the same-address generator
+        return pl.read_parquet(p, columns=["s", "q"]).with_columns(pl.col("s").cast(pl.Int64), pl.col("q").cast(pl.Int64))
     d = pl.read_csv(p, separator="\t", schema_overrides={d_: pl.Utf8 for d_ in ("matched_entity_ids", "candidate_entity_ids")})
     col = d.columns[1]
     return (d.filter(pl.col(col).fill_null("") != "").select(s=id_to_int("source1_entity_id").cast(pl.Int64), q=pl.col(col).str.split(","))

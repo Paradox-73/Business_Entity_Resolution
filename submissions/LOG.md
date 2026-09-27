@@ -44,3 +44,4 @@
 | v9c | `submissions/v9c/` | Sun 12:57 | 0.98878 (held-out) | _upload & fill in_ | v7p US/India (wide search + e5-small + bge) + v9a France (1631935 S1 rows with matches) |
 | v9d | `submissions/v9d/` | Sun 12:57 | 0.98878 (held-out) | _upload & fill in_ | BEST GUESS: v7p US/India + v9b France (descriptor veto + noise-word additions) (1632187 S1 rows with matches) |
 | v9e | `submissions/v9e/` | Sun 14:05 | 0.98878 (held-out) | _upload & fill in_ | v9d + France false-accept veto (1,145 pairs: legal form added + house number up 1-20 = decoy signature, lowercase test ~0 true); predicted France +0.0007 vs v9d (1632154 S1 rows with matches) |
+| v9f | `submissions/v9f/` | Sun 14:05 | 0.98878 (held-out) | _upload & fill in_ | v9e + 4,150 missed-true France additions (single-change copies at the same address the transformer lowered; lowercase test ~0.9 true, LB-realism ~0.75-0.8): predicted France +0.0017 vs v9d (range +0.0006..+0.0021) (1632258 S1 rows with matches) |

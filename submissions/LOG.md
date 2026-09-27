@@ -43,3 +43,4 @@
 | v9b | `submissions/v9b/` | Sun 12:57 | 0.98813 (held-out) | _upload & fill in_ | v9a + 9,800 rejected same-address pairs whose added words are noise words / groupe (lowercase test 0.96 true; LB-fit 0.77-0.81): France predicted +0.018..0.023; US/India of v7ens (1632262 S1 rows with matches) |
 | v9c | `submissions/v9c/` | Sun 12:57 | 0.98878 (held-out) | _upload & fill in_ | v7p US/India (wide search + e5-small + bge) + v9a France (1631935 S1 rows with matches) |
 | v9d | `submissions/v9d/` | Sun 12:57 | 0.98878 (held-out) | _upload & fill in_ | BEST GUESS: v7p US/India + v9b France (descriptor veto + noise-word additions) (1632187 S1 rows with matches) |
+| v9e | `submissions/v9e/` | Sun 14:05 | 0.98878 (held-out) | _upload & fill in_ | v9d + France false-accept veto (1,145 pairs: legal form added + house number up 1-20 = decoy signature, lowercase test ~0 true); predicted France +0.0007 vs v9d (1632154 S1 rows with matches) |

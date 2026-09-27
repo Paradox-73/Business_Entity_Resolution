@@ -442,6 +442,15 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 - Micro approximation: ~40% of them true. **In France a descriptor swap at the same address is mostly a DIFFERENT business** (US: 98.9% true, so the US-trained GBDT is over-confident on France name changes). The label-free 'decoy words keep the number 3%' argument missed this kind (no number change).
 - France LB points now usable as aggregate labels (all on the same candidates, US/India identical): v7ens 0.9518, v7m -0.0091, v7i -0.0035 (transformer additions), v7j -0.0163 (number-changed additions, ~8% true). Workflow 'fix-france' (27 Sep 11:40) fits France probabilities to them.
 
+### France fix (workflow fix-france, 27 Sep 11:40-12:50): descriptor-word veto
+
+- **Generator artifact used as a label-free test:** in US/India TRAIN labels, records with a swapped/added word are all-lowercase 0.25% (US swap, true) / 0.34% (India added, true) vs 2.15% / 2.39% when false: true records with a changed word are almost never lowercased, decoys are at the normal rate. France reference groups: pure decoy words 3.38%, noise words at the same house number 0.08%.
+- **Veto set:** 22,436 France pairs accepted in v7ens whose record adds or swaps in a DESCRIPTOR-class word (95 words keeping the house number 25-50% of the time: amicale, comite, ecole, amis, centre, club, societe, primaire...), synonym/stem swaps kept. 21.5k have the same house number. Lowercase share 3.75% -> ~0% true (every p3 / g band); a sibling statistic gives 0.05-0.10. The same test reproduces the LB history: v7m's restored set 0.44 true (LB ~0.40), v7j ~0 (LB ~0.08).
+- Predicted France +0.017..0.020 (LB +0.0025..0.003); the LB-fitted class model puts the descriptor class at 0.08-0.13 true.
+- Additions (v9b/v9d): 9,800 rejected same-address pairs whose added words are noise words / groupe-developpement-france: lowercase test 0.96 true, LB-fit 0.77-0.81 (near break-even) -> smaller, riskier.
+- Refuted: an LB-calibrated logistic re-decision (the 4 LB points cannot fix its sign). No change from 'twin S1' analysis (twin decoys already rejected).
+- Files: v9a (v7ens + veto), v9b (+ additions), v9c (v7p + veto), v9d (v7p + veto + additions). Scripts: code/business_entity_resolution/france_fix/.
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.

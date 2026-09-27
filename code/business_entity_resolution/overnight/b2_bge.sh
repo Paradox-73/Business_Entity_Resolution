@@ -3,7 +3,7 @@
 # friend 2's GPU (f2/b2_bge_remote.sh; each fold once its model is done there), then
 #   v7p  = wide search + stage 3 of e5-small and bge (3 folds each) blended; France from v7ens / v7m (_frrest)
 #   v7q  = old candidates + e5-small and bge blended (build_combo.sh); France from v7ens / v7m (_frrest)
-# Log: work/b2_bge.log. Resumable. Detached (PowerShell Start-Process) so Claude Code's memory cleanup can't stop it.
+# Log: work/b2_bge.log. Resumable. Detached (PowerShell Start-Process) so closing the terminal can't stop it.
 set -u
 F2="/c/ber_scratch/f2"; R="/e/Projects/Amazon ML Challenge"; W="$R/work"; WW="$(cygpath -w "$W")"
 RW=/home/bhavya/Business_Entity_Resolution/work; L="$W/b2_bge.log"; export PYTHONIOENCODING=utf8 MSYS_NO_PATHCONV=1

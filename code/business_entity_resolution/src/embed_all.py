@@ -1,4 +1,4 @@
-"""Retriever for ALL records (AWS GPU job; also runs on the 4 GB laptop GPU with the small model).
+"""Retriever for ALL records (GPU job; also runs on the 4 GB laptop GPU with the small model).
 
 Fine-tunes a multilingual e5 model on every training match (name + address text), with in-batch negatives
 plus one mined hard negative per pair (the wrong S1 our stage-1 model ranked first), then encodes every

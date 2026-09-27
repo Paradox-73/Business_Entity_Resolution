@@ -218,9 +218,7 @@ France rose from ≈ 0.952 (v7ens) to ≈ 0.978–0.98 (v9y onward), estimated f
 | [`EXPERIMENTS.md`](EXPERIMENTS.md) | **The lab notebook.** Every run, its held-out score, the decision taken, and the lessons |
 | [`submissions/LOG.md`](submissions/LOG.md) | Every built version: what it tests, held-out score, public score |
 | [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) | Methodology write-up in the organisers' template (draft for Round 2) |
-| [`docs/STRATEGY.md`](docs/STRATEGY.md) | The plan, roles and timeline written during the round |
-| `docs/runbooks/` | Instructions for the teammates' GPU machines and the lab server |
-| `docs/archive/2025_prep/` | Preparation written before the 2026 task was announced |
+| `docs/runbooks/` | How the transformer folds and the second pipeline were run on the teammates' GPU machines and the lab server |
 | `2026_official/`, `student_resource/` | Official problem statement, rules, template and validator. The dataset itself is not in git |
 
 `work/` (≈90 GB of intermediate files) and `output/` are created by the pipeline and never committed.

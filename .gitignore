@@ -15,7 +15,6 @@ __pycache__/
 .ipynb_checkpoints/
 .env
 *.key
-.claude/
 __MACOSX/
 .DS_Store
 

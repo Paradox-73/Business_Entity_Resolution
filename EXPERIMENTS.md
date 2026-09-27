@@ -142,7 +142,7 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 - Check 5, per-source cap: matches per (S1, source) = 1: 1.51M, 2: 1.32M, 3: 0.71M, 4: 0.26M, 5: 59.5k, 6: 2.8k. No useful cap.
 - Check 6, calibration of v3 p2 (best candidate per record): under-confident in the middle (predicted 0.45 -> actual 0.56; 0.15 -> 0.23; 0.86 -> 0.92). Isotonic calibration before the expected-F0.5 rule is worth testing (calibrate on test-like OOF).
 - Check 4 (test look-alikes = train businesses?): pending, needs RAM after v4 training.
-- Forum rules (25 Sep): hand-written normalisation dictionaries, unsupervised stats on test, self-training allowed; libpostal/gazetteers/APIs not allowed. Plan in docs/AWS_PLAN.md.
+- Forum rules (25 Sep): hand-written normalisation dictionaries, unsupervised stats on test, self-training allowed; libpostal/gazetteers/APIs not allowed.
 
 ### v5 result and France diagnosis (25 Sep 19:00-19:30)
 
@@ -176,7 +176,7 @@ Implications: (1) the look-alike share is the main measurable difference; (2) US
 | Self-training on test (1.03M pseudo-labelled test rows incl. 519k France, weight 0.5; validation adds each fold's own pseudo-labels)                                     | 0.97921 vs 0.97926 without                                                                                                             | **not used** (no gain on held-out; its test effect cannot be measured)                                                                                                         |
 | Calibration refit on the consensus model                                                                                                                                 | 0.97915 (thr 0.55) -> 0.97966 (US 0.9809, India 0.9786)                                                                                | **v6** = consensus model + calibrated per-country rule + France from the cleaned rebuild; 1,637,900 S1 rows with matches (US 2.33M, India 2.76M, France 0.91M matched records) |
 
-Smoke tests for AWS (laptop GPU, tiny subsets): `embed_all.py` train/encode/search/eval and `rerank.py` select/train/score/stage3 run end to end.
+Smoke tests for the GPU jobs (laptop GPU, tiny subsets): `embed_all.py` train/encode/search/eval and `rerank.py` select/train/score/stage3 run end to end.
 Close calls in v4 scores: train 1.60M of 7.95M S2/S3 rows, test 2.90M of 9.97M (3.43M pairs).
 
 ### v4 LB 0.961357 (25 Sep 20:50) — test-like training HURT (-0.0086 vs v3)
@@ -460,7 +460,7 @@ Held-out loss of the v10a-like blend (0.99205, `france_fix/recall/decomp.py`): 0
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.
 - **Resampled training data must be checked against test on every feature that depends on the candidate list** (candidates per record, counts, ranks, margins) before training on it. Deleting pairs is not the same as searching at lower density (v4: -0.0086 LB).
 - GPU 4 GB cannot fit XGBoost on the full 11.5M-row stage-1 sample (OOM after 3 folds, v4 first try). Use fold models (saved immediately) and average them for test.
-- A Claude Code session restart kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.
+- Closing the terminal session kills background jobs. Every long step must be resumable: build skips chunk files already on disk (added 25 Sep 13:45 after the test build died at India chunk 6); stage 1 and test stage-1 scores are cached.
 - A relative `max_df` makes search cost grow with S1 size; use an absolute document-frequency cap for **search**, but compute similarity **features** with the full vocabulary.
 - **Every search's df cap must be checked at full density, not only the one that failed.** The address cap was fixed on 25 Sep, but the name cap (4000, tuned on S10) left a median US name with 4 3-grams and 3.2% with none; exact unique names were found only 86% of the time (audit 26 Sep).
 - Learned cleaning maps must be learned (or at least checked) per country: the pooled map sends India 'TN' to 'tennessee'.

@@ -1,4 +1,4 @@
-"""Cross-encoder reranker for close calls (AWS GPU job; smoke-testable on the 4 GB laptop with BER_CE_LIMIT).
+"""Cross-encoder reranker for close calls (GPU job; smoke-testable on the 4 GB laptop with BER_CE_LIMIT).
 
 A transformer reads the two records' text together ("name | address" of the S2/S3 row and of the S1 row) and
 outputs one match score. It only scores "close calls": the top-2 candidates of rows whose decision is not

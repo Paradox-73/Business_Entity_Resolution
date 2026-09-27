@@ -448,6 +448,7 @@ Test file (`submissions/v9`): expF 0.5 (chosen on held-out), France min rule (19
 - **Every search's df cap must be checked at full density, not only the one that failed.** The address cap was fixed on 25 Sep, but the name cap (4000, tuned on S10) left a median US name with 4 3-grams and 3.2% with none; exact unique names were found only 86% of the time (audit 26 Sep).
 - Learned cleaning maps must be learned (or at least checked) per country: the pooled map sends India 'TN' to 'tennessee'.
 - **On a shared server, disk and RAM belong to everyone.** Measure bytes/row on one chunk before a full build; stream instead of storing when the total does not fit; never let our job fill `/home`. Pin GPU work with `CUDA_VISIBLE_DEVICES`.
+- **In bash double quotes `"$WW\ce_x\$f"` does not expand `$f`: `\$` escapes the dollar** (27 Sep 18:12: e5l_final2.sh would have saved Gathik's fold-2 downloads as a file literally named `work\ce_x$f`). Write local download targets with forward slashes (`E:/.../$f`) and check the file exists after every download.
 - `pkill -f <pattern>` / `pgrep -f` over ssh also match the ssh command's own shell when the pattern is in the command line: use `[p]attern` or kill by pid.
 - Always time one chunk at test scale (US test S1 = 663k rows) before launching a full run.
 - Prediction share per country on test (v1): India 12.8% empty vs 5.6% singletons in train, so India is under-matched.

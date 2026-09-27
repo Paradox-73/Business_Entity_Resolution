@@ -411,7 +411,9 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 - Friend 1's e5-base (800k rows) ranks below e5-small (all rows) on every fold: capping rows costs more than the bigger model gains. Friend 2 (A6000) trains bge-reranker-v2-m3 on all 1.68M rows, ~2.1 steps/s while another job (`xenc.py`) shared the card, 4.3 steps/s alone.
 
 ### v8: streamed full test build on the lab GPU server (27 Sep 01:30-08:35 IST; `v8.py`, drivers in `code/business_entity_resolution/server/`)
+
 Pipeline (`BER_V8=1`): audited blocking + cleaning -> stage-1 GBDT (XGBoost depth 10, 600 rounds, 3 folds by true S1) trained on 8% of the eligible train records (US 310,637 + India 208,929 records; 20.8M pairs) -> every test record scored chunk by chunk, top-5 kept (no pair-feature files: the shared disk cannot hold them) -> close calls (best p1 in [0.01, 0.995] or 2nd p1 >= 0.2; train 185,387 records, **test 3,684,716 records = 37%**, 7.37M pairs) -> 3 fold cross-encoders (bge-reranker-v2-m3, fully fine-tuned, ~248k close-call pairs each, 10 steps/s; each scored its fold out-of-fold and all 7.37M test pairs, ~53 min per fold) -> stack XGBoost [p1, mean logit, margins, ranks, n_cc] -> expF floor 0.5 (v7ens's rule).
+
 - **Held-out on the train sample** (S1 groups of the sampled records; with 8% record sampling most S1 keep one true record, so this is NOT the FULL protocol and not comparable with 0.98813): GBDT stage 1 **0.9545** -> v8 **0.9761** (+0.0216). The transformer's gain is far larger here than in the S1-sampled experiment (+0.0036), where look-alike competition was missing.
 - Test output: 1,634,320 of 1,732,544 S1 rows with matches (94.3%; v7ens ~1.633M). Matched records: US 2,238,857 (v7ens 2.261M), India 2,736,774 (2.746M), France **v8a 849,482** (transformer may only lower + legal veto) / **v8b 887,192** (France from the GBDT alone + legal veto); expected true France ~882k. Both files: team check and official validator (`--check-ids`) PASS. No candidate_pairs.tsv (v9 writes one).
 - Not validated at FULL density and no stage 2 (group features need every train record): v8 changes blocking, model and France handling at once versus v7ens, so its LB score cannot be attributed to one change. v8b vs v8a isolates the transformer's France effect on this pipeline.
@@ -419,21 +421,22 @@ Pipeline (`BER_V8=1`): audited blocking + cleaning -> stage-1 GBDT (XGBoost dept
 - **v9** (FULL rebuild with the v8 blocking -> `pipeline.py train full cons` -> 3-fold bge on close calls -> stage 3 -> France rules; comparable with v7ens/v7g on the halves protocol, writes candidate_pairs.tsv) started 27 Sep 08:36 IST after v8, runs serialised to protect the shared server (`run_v9.sh`).
 - **v9 GBDT results, same FULL protocol as every earlier run (eval-half S1, full density, `pipeline.py train full cons`):**
 
-| | recall ceiling | stage 1 OOF | stage 2 OOF (thr) | stage 2 + expF (best rule) |
-|---|---|---|---|---|
-| production blocking (run 9 / `full_cons`) | 0.9851 | 0.9724 | 0.9788 (base) | **0.98151** |
-| v8 blocking + cleaning (v9) | **0.9963** | **0.9753** | 0.9844 | **0.98472 (+0.0032)** |
+|                                           | recall ceiling | stage 1 OOF | stage 2 OOF (thr) | stage 2 + expF (best rule) |
+| ----------------------------------------- | -------------- | ----------- | ----------------- | -------------------------- |
+| production blocking (run 9 / `full_cons`) | 0.9851         | 0.9724      | 0.9788 (base)     | **0.98151**                |
+| v8 blocking + cleaning (v9)               | **0.9963**     | **0.9753**  | 0.9844            | **0.98472 (+0.0032)**      |
 
-  417.5M train pairs (40.5 per record vs ~31). The blocking/cleaning audit is worth +0.0032 before any transformer.
+417.5M train pairs (40.5 per record vs ~31). The blocking/cleaning audit is worth +0.0032 before any transformer.
+
 - **v9 transformer stage (27 Sep 10:27-12:54 IST):** close calls train 1.88M pairs (1.47M records), test 2.65M pairs (2.17M records, 22%: stage 2 is more certain than v8's stage 1, 37%); 3 fold models of bge-reranker-v2-m3 (fully fine-tuned, 1M pairs each, ~27 min training + ~20 min scoring per fold on the Blackwell GPU); fold models agree on test (corr 0.9866).
 
-| held-out macro F0.5 (eval-half S1) | v7ens | v7g | **v9** |
-|---|---|---|---|
-| halves protocol (mixed records keep GBDT p2) | 0.98813 | 0.98845 | **0.99112** |
-| all close calls rescored | — | 0.98911 | **0.99183** (GBDT 0.98472 -> +0.0071) |
-| all S1 rows | — | — | 0.99187 |
+| held-out macro F0.5 (eval-half S1)           | v7ens   | v7g     | **v9**                                |
+| -------------------------------------------- | ------- | ------- | ------------------------------------- |
+| halves protocol (mixed records keep GBDT p2) | 0.98813 | 0.98845 | **0.99112**                           |
+| all close calls rescored                     | —       | 0.98911 | **0.99183** (GBDT 0.98472 -> +0.0071) |
+| all S1 rows                                  | —       | —       | 0.99187                               |
 
-  Test file (`submissions/v9`): expF 0.5 (chosen on held-out), France min rule (197,140 France pairs lowered back to the GBDT p) + legal-form veto (4,857 pairs with p2 >= 0.3); matched France 853,628 / India 2,748,510 / US 2,255,299; 1,632,885 S1 rows; server check PASS. **+0.0030 over v7ens on the same protocol; US/India change is validated, France uses the team's validated rules.**
+Test file (`submissions/v9`): expF 0.5 (chosen on held-out), France min rule (197,140 France pairs lowered back to the GBDT p) + legal-form veto (4,857 pairs with p2 >= 0.3); matched France 853,628 / India 2,748,510 / US 2,255,299; 1,632,885 S1 rows; server check PASS. **+0.0030 over v7ens on the same protocol; US/India change is validated, France uses the team's validated rules.**
 
 ## Lessons (read before changing anything)
 

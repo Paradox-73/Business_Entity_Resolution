@@ -1,0 +1,22 @@
+10:01:19 waiting for the rescore on friend 2
+get /home/bhavya/Business_Entity_Resolution/work/ce_b2/test_ce_bgef0.parquet -> E:\Projects\Amazon ML Challenge\work\ce_b2\test_ce_bgef0.parquet in 5s
+get /home/bhavya/Business_Entity_Resolution/work/ce_b2/test_ce_bgef1.parquet -> E:\Projects\Amazon ML Challenge\work\ce_b2\test_ce_bgef1.parquet in 5s
+get /home/bhavya/Business_Entity_Resolution/work/ce_b2/test_ce_bgef2.parquet -> E:\Projects\Amazon ML Challenge\work\ce_b2\test_ce_bgef2.parquet in 5s
+bge f0: rows 3788098, reused max diff 0.0, new 585295 mean -2.538, old mean -3.239
+bge f1: rows 3788098, reused max diff 0.0, new 585295 mean -2.522, old mean -3.198
+bge f2: rows 3788098, reused max diff 0.0, new 585295 mean -2.539, old mean -3.204
+10:49:59 bge f0: rows 3788098, reused max diff 0.0, new 585295 mean -2.538, old mean -3.239 bge f1: rows 3788098, reused max diff 0.0, new 585295 mean -2.522, old mean -3.198 bge f2: rows 3788098, reused max diff 0.0, new 585295 mean -2.539, old mean -3.204 
+10:54:49 [  150.2s] BEST eval, halves protocol (comparable with v7ens 0.98813): 0.98879 ({"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"})
+10:58:37 v7p all: [  218.5s] BEST blend [0.3, 0.7]: 0.98950 ({"type": "expf", "floor": 0.5, "alpha": 1.0, "prob": "p2"}); single bases: full_cons 0.98903, full_cons 0.98951
+10:58:56 [   11.8s] India: 2733603 matched, 763305 S1 non-empty [   13.1s] US: 2249355 matched, 625099 S1 non-empty 
+259452 France S1 rows taken from E:/Projects/Amazon ML Challenge/submissions/v7ens/matching_results.tsv (19452 differ from E:\Projects\Amazon ML Challenge\work\out_v7p_all\matching_results.tsv) -> E:\Projects\Amazon ML Challenge\work\out_v7p
+259452 France S1 rows taken from E:\Projects\Amazon ML Challenge\work\out_v7m\matching_results.tsv (35906 differ from E:\Projects\Amazon ML Challenge\work\out_v7p_all\matching_results.tsv) -> E:\Projects\Amazon ML Challenge\work\out_v7p_frrest
+[    2.5s] records whose wide best S1 is new: 257973 (16034 with p2 >= 0.5); rows old 11656208 -> 11667740
+[    3.0s] wrote E:\Projects\Amazon ML Challenge\work\ce\test_scores_v7p_hyb.parquet
+259452 France S1 rows taken from E:/Projects/Amazon ML Challenge/submissions/v7ens/matching_results.tsv (30304 differ from E:\Projects\Amazon ML Challenge\work\out_v7p_hyb_all\matching_results.tsv) -> E:\Projects\Amazon ML Challenge\work\out_v7p_hyb
+259452 France S1 rows taken from E:\Projects\Amazon ML Challenge\work\out_v7m\matching_results.tsv (45919 differ from E:\Projects\Amazon ML Challenge\work\out_v7p_hyb_all\matching_results.tsv) -> E:\Projects\Amazon ML Challenge\work\out_v7p_hyb_frrest
+10:59:31 v7p check: PASS
+10:59:34 v7p_frrest check: PASS
+10:59:37 v7p_hyb check: PASS
+10:59:40 v7p_hyb_frrest check: PASS
+10:59:40 DONE v7p

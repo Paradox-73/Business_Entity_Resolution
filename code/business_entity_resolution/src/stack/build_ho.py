@@ -1,4 +1,5 @@
-"""Held-out feature table: all train US/India pairs, with label, eval flag, cross-fit half. Reproduces 0.99205 baseline."""
+"""Held-out feature table: all train pairs (the countries with training labels: US, India), with label, eval flag,
+cross-fit half. Reproduces 0.99205 baseline."""
 import os, sys, zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from feats import *

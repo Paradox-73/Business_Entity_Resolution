@@ -310,20 +310,23 @@ def stage3():
     sides = [x for x in os.environ.get("BER_S3_SIDES", "a,b").split(",")
              if os.path.exists(os.path.join(OUT, f"train_ce{'' if x == 'a' else '_' + x}.parquet"))
              and os.path.exists(os.path.join(OUT, f"test_ce{'' if x == 'a' else '_' + x}.parquet"))]
-    # BER_S3_SEG=1: stage 3 also sees the record's segment (source file, no address, non-Latin name, India)
+    # BER_S3_SEG=1: stage 3 also sees the record's segment (source file, no address, non-Latin name, country with
+    # non-Latin-script records)
     seg = os.environ.get("BER_S3_SEG") == "1"
-    feats = S3FEATS + (["src", "addr_missing", "name_nonlatin", "is_india"] if seg else []) + (["p1_rank"] if EXTRA else [])
+    feats = S3FEATS + (["src", "addr_missing", "name_nonlatin", "nonlatin_country"] if seg else []) + (["p1_rank"] if EXTRA else [])
     tagx = os.environ.get("BER_S3_TAG") or ("_" + "".join(sides) + ("_seg" if seg else ""))   # e.g. _a, _ab
     tag = json.load(open(os.path.join(WORK, "models", md, "result.json")))["tag"]
 
     def add_seg(df, split_tag):
-        """With BER_S3_SEG=1, add the record's segment features (source, no address, non-Latin name, India) from
-        WORK/pairs/<split_tag>/q.parquet."""
+        """With BER_S3_SEG=1, add the record's segment features from WORK/pairs/<split_tag>/q.parquet: source, no
+        address, non-Latin name, and nonlatin_country = the record's country has records with a non-Latin name in
+        that file (India in this dataset; read from the data, as common.nonlatin_countries)."""
         if not seg:
             return df
-        qi = pl.read_parquet(os.path.join(WORK, "pairs", split_tag, "q.parquet")).select(
-            "q", pl.col("src").cast(pl.Float32), pl.col("addr_missing").cast(pl.Float32),
-            pl.col("name_nonlatin").cast(pl.Float32), is_india=(pl.col("country") == "India").cast(pl.Float32))
+        qi = pl.read_parquet(os.path.join(WORK, "pairs", split_tag, "q.parquet"))
+        nl = qi.filter("name_nonlatin")["country"].unique().to_list()
+        qi = qi.select("q", pl.col("src").cast(pl.Float32), pl.col("addr_missing").cast(pl.Float32),
+                       pl.col("name_nonlatin").cast(pl.Float32), nonlatin_country=pl.col("country").is_in(nl).cast(pl.Float32))
         return df.join(qi, on="q", how="left")
     log(f"stage 3 on sides {sides} (output suffix '{tagx}')")
     r = _s3_features(pl.concat([pl.read_parquet(os.path.join(OUT, f"train_ce{'' if x == 'a' else '_' + x}.parquet"))

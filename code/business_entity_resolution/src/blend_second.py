@@ -1,9 +1,10 @@
-"""US/India probabilities of v10a: our pipeline blended with the second pipeline, then the list-mover overrides.
+"""Probabilities of v10a for the countries with training labels (US, India; common.labelled_countries): our pipeline
+blended with the second pipeline, then the list-mover overrides.
 
   python blend_second.py <out_dir> [<movers_dir> [<reference_dir>]]
   v10a: python blend_second.py $BER_WORK/blend9 $BER_WORK/movers
 
-For every US/India (record q, S1 row s) pair that either pipeline scored:
+For every (record q, S1 row s) pair of those countries that either pipeline scored:
   po = our probability, p2 of WORK/test_scores_blend_v7p.parquet (stage 3 of e5-small 0.3 + bge-reranker-v2-m3 0.7 on
        the wide US/India candidate lists; README step 15)
   pg = the second pipeline's probability, p2 of WORK/gathik/v9/ce_x_test_scores_ce_bgef0bgef1bgef2.parquet (its stage
@@ -27,7 +28,7 @@ import sys
 
 import polars as pl
 
-from common import WORK, id_to_int, log
+from common import WORK, id_to_int, is_labelled, log
 from pipeline import decide_expf
 
 W_SECOND = 0.4          # weight of the second pipeline where both pipelines scored a pair
@@ -40,17 +41,17 @@ def i64(df):
 
 
 def blend(movers_dir):
-    """US/India p2 per pair: 0.6 ours + 0.4 the second pipeline's where both scored it, then the list-mover
-    overrides from movers_dir. Returns (scored pairs q, s, p2; candidate pairs q, s = cand_union)."""
+    """p2 per pair of the countries with training labels: 0.6 ours + 0.4 the second pipeline's where both scored it,
+    then the list-mover overrides from movers_dir. Returns (scored pairs q, s, p2; candidate pairs q, s = cand_union)."""
     s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
         s=id_to_int("entity_id"), country="country")
-    usi = s1.filter(pl.col("country") != "France").select("s")
+    usi = s1.filter(is_labelled()).select("s")
     ours_all = i64(pl.read_parquet(os.path.join(WORK, "test_scores_blend_v7p.parquet"), columns=["q", "s", "p2"]))
     po = ours_all.join(usi, on="s").rename({"p2": "po"})
     pg = i64(pl.read_parquet(os.path.join(WORK, "gathik", "v9", "ce_x_test_scores_ce_bgef0bgef1bgef2.parquet"),
                              columns=["q", "s", "p2"])).join(usi, on="s").rename({"p2": "pg"})
     d = po.join(pg, on=["q", "s"], how="full", coalesce=True)
-    log(f"US/India pairs: ours {po.height}, second pipeline {pg.height}, union {d.height}")
+    log(f"pairs of the countries with training labels: ours {po.height}, second pipeline {pg.height}, union {d.height}")
     d = d.select("q", "s", p2=pl.when(pl.col("po").is_null()).then(pl.col("pg"))
                  .when(pl.col("pg").is_null()).then(pl.col("po"))
                  .otherwise(W_SECOND * pl.col("pg") + (1 - W_SECOND) * pl.col("po")))

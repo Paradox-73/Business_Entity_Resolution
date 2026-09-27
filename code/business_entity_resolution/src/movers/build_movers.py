@@ -1,5 +1,6 @@
-"""US/India 'list-mover' correction: where the wide-candidate build and the old-candidate build disagree on a pair, the
-decision goes to the transformer-only probability (pt), which does not depend on the candidate list.
+"""'List-mover' correction for the countries with training labels (US, India; common.labelled_countries): where the
+wide-candidate build and the old-candidate build disagree on a pair, the decision goes to the transformer-only
+probability (pt), which does not depend on the candidate list.
 
   python movers/build_movers.py <wide_sub> <old_sub> <base_sub> <out_dir> [wide_scores old_scores]    (from src/)
   v9zm / v10a / v10d: python movers/build_movers.py v7p v7q v9y $BER_WORK/movers
@@ -14,13 +15,14 @@ sc_w / sc_o: the pair was a transformer close call in the wide / old build.
                   old build scored it, pt >= 0.8
   tier 2 remove : as tier 1 remove but both builds scored it, pt < 0.2
   tier 2 restore: as tier 1 restore but both builds scored it, pt >= 0.95
-Writes <out_dir>/usi_<base>_tier1.parquet and usi_<base>_tier12.parquet (US/India pairs s, q) + the change lists."""
+Writes <out_dir>/usi_<base>_tier1.parquet and usi_<base>_tier12.parquet (pairs s, q of those countries) + the change
+lists."""
 import os
 import sys
 import numpy as np
 import polars as pl
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # src/
-from common import ROOT, WORK, id_to_int  # noqa: E402
+from common import ROOT, WORK, id_to_int, is_labelled  # noqa: E402
 
 wide, old, base, out = sys.argv[1:5]
 ws = sys.argv[5] if len(sys.argv) > 5 else f"{WORK}/test_scores_blend_{wide}.parquet"
@@ -30,11 +32,11 @@ s1 = pl.read_parquet(f"{WORK}/test_s1.parquet", columns=["entity_id", "country"]
 
 
 def pairs(name):
-    """US/India (q, s, country) pairs of <root>/submissions/<name>/matching_results.tsv."""
+    """(q, s, country) pairs of <root>/submissions/<name>/matching_results.tsv in the countries with training labels."""
     d = pl.read_csv(os.path.join(ROOT, "submissions", name, "matching_results.tsv"), separator="\t", quote_char=None, infer_schema_length=0) \
         .filter(pl.col("matched_entity_ids").fill_null("") != "")
     return d.select(s=id_to_int("source1_entity_id").cast(pl.Int64), q=pl.col("matched_entity_ids").str.split(",")).explode("q") \
-        .with_columns(q=id_to_int("q").cast(pl.Int64)).join(s1, on="s").filter(pl.col("country") != "France").select("q", "s", "country")
+        .with_columns(q=id_to_int("q").cast(pl.Int64)).join(s1, on="s").filter(is_labelled()).select("q", "s", "country")
 
 
 Wd, O, B = pairs(wide), pairs(old), pairs(base)
@@ -51,7 +53,7 @@ def fam_pt(fam):
     """For one family: the mean 3-fold logit of every test close-call pair (wide build ce_b2 first, then the
     old build ce_x), and P(true) per country and 0.5-wide logit bin from the train out-of-fold scores."""
     tr = pl.concat([pl.read_parquet(f"{WORK}/ce_b2/train_ce_{fam}f{k}.parquet", columns=["label", "country", "ce"]) for k in range(3)]) \
-        .filter(pl.col("country") != "France")
+        .filter(is_labelled())
     cal = tr.with_columns(b=pl.col("ce").cut(cuts)).group_by("country", "b").agg(pt=pl.col("label").mean())
     L = []
     for d in ("ce_b2", "ce_x"):

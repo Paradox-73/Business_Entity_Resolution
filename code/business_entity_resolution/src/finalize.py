@@ -1,18 +1,19 @@
 """Write matching_results.tsv from saved test scores with the calibrated per-country decision (experiments/calib.py).
 
-  python finalize.py <model_dir_name> <out_dir> <scores.parquet>[:<countries>] [...]
-  e.g. finalize.py tlike_xgb_cons out_v6 E:/.../test_scores_tlike_xgb_cons.parquet:US,India E:/.../test_scores_tlike_xgb_cons_testfr.parquet:France
+  python finalize.py <model_dir_name> <out_dir> <scores.parquet>[:<country>,<country>...] [...]
+  e.g. finalize.py tlike_xgb_cons out_v6 <test_scores_tlike_xgb_cons.parquet>:<countries A> <test_scores_..._testfr.parquet>:<countries B>
 
 Each scores file has q, s, p1, p2 (pipeline.predict writes WORK/test_scores_<model>[_<test_tag>].parquet).
-Several files are concatenated (e.g. US/India from the full test build + France from the 'testfr' rebuild);
-rows of a country must come from exactly one file. Countries without their own rule (France) use 'default'.
+Several files are concatenated (e.g. the full test build for some countries + the 'testfr' rebuild for the others);
+rows of a country must come from exactly one file. The rule file holds one rule per country with training labels;
+the countries without training labels (France in this test set) use its 'default' rule.
 """
 import json
 import os
 import sys
 import numpy as np
 import polars as pl
-from common import WORK, log, id_to_int, int_to_id
+from common import WORK, log, id_to_int, int_to_id, is_unlabelled
 from pipeline import decide_expf
 
 md, out_dir, files = os.path.join(WORK, "models", sys.argv[1]), sys.argv[2], sys.argv[3:]
@@ -21,7 +22,7 @@ cal = json.load(open(os.path.join(md, os.environ.get("BER_CALIB", "calib.json"))
 s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
     s=id_to_int("entity_id"), s1_id="entity_id", country="country")
 def load_scores(spec):
-    """'path' (all countries) or 'path:US,India' (only these countries' rows)."""
+    """'path' (all countries) or 'path:<country>,<country>' (only these countries' rows)."""
     path, sep, cs = spec.rpartition(":")
     if not sep or cs.endswith(".parquet") or "/" in cs or "\\" in cs:     # no country list (colon of "E:/...")
         path, cs = spec, ""
@@ -36,28 +37,29 @@ nf = B.select(pl.struct("q", "s").is_duplicated().sum()).item()
 assert nf == 0, f"{nf} duplicated (q, s) rows: a country appears in two score files"
 if cal.get("x"):
     B = B.with_columns(pc=pl.Series(np.interp(B["p2"].to_numpy(), cal["x"], cal["y"]).astype(np.float32)))
-# France legal-form veto (audit 25 Sep, confirmed on data): France look-alikes keep the name and change the legal
-# form, while true France records keep it. The cleaning strips legal forms from name_core, so the model cannot see
-# the conflict. BER_FR_LEGAL_VETO=1: a France pair whose two raw names both carry a legal form, with none in common,
-# gets p2 = 0 before the decision.
-FR_FORMS = ["sarl", "sas", "sasu", "sa", "eurl", "sci", "snc", "ei", "eirl", "selarl", "scp", "gie", "earl"]
+# Legal-form veto for the countries without training labels (audit 25 Sep on the test rows of France, the only such
+# country in this test set; confirmed on data): look-alikes there keep the name and change the legal form, while true
+# records keep it. The cleaning strips legal forms from name_core, so the model cannot see the conflict.
+# BER_FR_LEGAL_VETO=1: a pair of a country without training labels whose two raw names both carry a legal form, with
+# none in common, gets p2 = 0 before the decision. LEGAL_FORMS are the forms found in those rows (French forms).
+LEGAL_FORMS = ["sarl", "sas", "sasu", "sa", "eurl", "sci", "snc", "ei", "eirl", "selarl", "scp", "gie", "earl"]
 if os.environ.get("BER_FR_LEGAL_VETO") == "1":
     def forms(split_files):
-        """France rows of the given cleaned source files: integer id and the set of legal forms (FR_FORMS) in the
-        raw name, with accents removed and dotted forms joined."""
+        """Rows of the countries without training labels in the given cleaned source files: integer id and the set of
+        legal forms (LEGAL_FORMS) in the raw name, with accents removed and dotted forms joined."""
         d = pl.concat([pl.read_parquet(f, columns=["entity_id", "business_name", "country"]) for f in split_files])
-        d = d.filter(pl.col("country") == "France")
+        d = d.filter(is_unlabelled())
         t = (d["business_name"].fill_null("").str.normalize("NFKD").str.replace_all(r"\p{M}", "").str.to_lowercase()
                .str.replace_all(r"\b([a-z])\.", "$1").str.replace_all(r"[^a-z0-9]+", " ").str.strip_chars())
         return d.select(id=id_to_int("entity_id"), f=t.str.split(" ").list.eval(
             pl.element().replace({"5arl": "sarl", "5as": "sas"})).list.eval(
-            pl.element().filter(pl.element().is_in(FR_FORMS))).list.unique())
+            pl.element().filter(pl.element().is_in(LEGAL_FORMS))).list.unique())
     fs = forms([os.path.join(WORK, "test_s1.parquet")]).rename({"id": "s", "f": "fs"})
     fq = forms([os.path.join(WORK, f"test_s{k}.parquet") for k in (2, 3)]).rename({"id": "q", "f": "fq"})
     B = B.join(fs, on="s", how="left").join(fq, on="q", how="left")
-    veto = ((pl.col("country") == "France") & (pl.col("fs").list.len() > 0) & (pl.col("fq").list.len() > 0)
+    veto = (is_unlabelled() & (pl.col("fs").list.len() > 0) & (pl.col("fq").list.len() > 0)
             & (pl.col("fs").list.set_intersection("fq").list.len() == 0)).fill_null(False)
-    log(f"France legal-form veto: {B.filter(veto).height} pairs set to p2=0 "
+    log(f"legal-form veto (countries without training labels): {B.filter(veto).height} pairs set to p2=0 "
         f"({B.filter(veto & (pl.col('p2') >= 0.3)).height} with p2 >= 0.3)")
     B = B.with_columns(p2=pl.when(veto).then(0.0).otherwise(pl.col("p2")).cast(pl.Float32)).drop("fs", "fq")
 

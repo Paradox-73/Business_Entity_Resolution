@@ -8,6 +8,7 @@ Address cleaning: local-script phrases and short forms are mapped with tables le
 the training pairs (see learn_maps.py), junk tokens removed, numbers extracted without
 leading zeros.
 """
+import functools
 import os
 import polars as pl
 
@@ -56,14 +57,34 @@ def name_exprs(col="business_name"):
     ]
 
 
-# BER_V8=1 (audit 26 Sep, EXPERIMENTS.md): India state codes the pooled learned map gets wrong ('tn' -> 'tennessee';
-# 'dl' / 'od' unmapped while India S1 writes 'Tamil Nadu' / 'Delhi' / 'Orissa'; India rows only, 'TN' is Tennessee
-# in US addresses), and ordinals ('eleventh street' in records vs '11th street' in S1 -> both '11 street').
+# BER_V8=1 (audit 26 Sep on India, EXPERIMENTS.md): state codes the pooled learned map gets wrong ('tn' -> 'tennessee';
+# 'dl' / 'od' unmapped while India S1 writes 'Tamil Nadu' / 'Delhi' / 'Orissa'), and ordinals ('eleventh street' in
+# records vs '11th street' in S1 -> both '11 street'). STATE_CODES applies only to the rows of state_code_countries(),
+# the countries whose S1 rows write these state names rather than the codes: 'TN' is Tennessee in US addresses.
 V8 = os.environ.get("BER_V8") == "1"
-INDIA_ABBREV = {"tn": "tamil nadu", "dl": "delhi", "od": "orissa", "odisha": "orissa"}
+STATE_CODES = {"tn": "tamil nadu", "dl": "delhi", "od": "orissa", "odisha": "orissa"}
 ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh",
             "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth",
             "twentieth"]
+
+
+def _words_re(words):
+    """Regex matching any of `words` as a whole word, longest first."""
+    return r"\b(?:" + "|".join(sorted(words, key=len, reverse=True)) + r")\b"
+
+
+@functools.lru_cache(maxsize=None)
+def state_code_countries():
+    """Countries whose raw Source 1 addresses (train and test files, lowercased) name a state of STATE_CODES in more
+    rows than they carry one of its codes. Read from the data; on 27 Sep 2026: India 382,283 rows against 656, US 190
+    against 89,794, France 0 against 0, so India alone."""
+    from common import raw_path
+    d = pl.concat([pl.read_csv(raw_path(split, 1), separator="\t", quote_char=None, infer_schema_length=0,
+                               columns=["business_address", "country"]) for split in ("train", "test")])
+    a = d["business_address"].fill_null("").str.to_lowercase()
+    n = (d.with_columns(full=a.str.contains(_words_re(set(STATE_CODES.values()))), code=a.str.contains(_words_re(STATE_CODES)))
+          .drop_nulls("country").group_by("country").agg(pl.col("full").sum(), pl.col("code").sum()))
+    return tuple(sorted(n.filter(pl.col("full") > pl.col("code"))["country"].to_list()))
 
 
 def _ordinals(e):
@@ -75,7 +96,7 @@ def _ordinals(e):
 def addr_exprs(script_map=None, abbrev_map=None, col="business_address"):
     """Polars expressions of the cleaned address columns: addr (local-script phrases mapped, accents and junk
     tokens removed, short forms expanded with the learned map), addr_nums (numbers without leading zeros) and the flags
-    addr_missing, addr_nonlatin. With BER_V8=1 also the India state codes and the ordinals."""
+    addr_missing, addr_nonlatin. With BER_V8=1 also STATE_CODES (rows of state_code_countries()) and the ordinals."""
     raw = pl.col(col).fill_null("")
     x = raw.str.to_lowercase()
     if script_map:
@@ -85,8 +106,8 @@ def addr_exprs(script_map=None, abbrev_map=None, col="business_address"):
     x = _squash(x.str.replace_all(_JUNK, " "))
     if abbrev_map and V8:
         tok = x.str.split(" ")
-        x = pl.when(pl.col("country") == "India").then(
-            tok.list.eval(pl.element().replace(dict(abbrev_map, **INDIA_ABBREV))).list.join(" ")).otherwise(
+        x = pl.when(pl.col("country").is_in(list(state_code_countries()))).then(
+            tok.list.eval(pl.element().replace(dict(abbrev_map, **STATE_CODES))).list.join(" ")).otherwise(
             tok.list.eval(pl.element().replace(abbrev_map)).list.join(" "))
     elif abbrev_map:
         x = (x.str.split(" ").list.eval(pl.element().replace(abbrev_map)).list.join(" "))
@@ -102,9 +123,10 @@ def addr_exprs(script_map=None, abbrev_map=None, col="business_address"):
     ]
 
 
-# ---- France (no training labels): rules from the word differences between France records and the S1 row
-# they confidently match on test (work log 25 Sep, EXPERIMENTS.md "France"). The US-learned abbreviation map
-# is NOT applied to France (it turns "de" into "delaware", "la" into "louisiana", "st" into "street").
+# ---- French rules for the countries without training labels (France in this test set): rules from the word
+# differences between France records and the S1 row they confidently match on test (work log 25 Sep, EXPERIMENTS.md
+# section France). The learned abbreviation map is NOT applied (it turns "de" into "delaware", "la" into "louisiana", "st"
+# into "street").
 FR_LEGAL = ["snc", "ei", "eirl", "scp", "selarl", "selas", "gie", "earl", "sca", "cie", "compagnie", "societe",
             "ste", "ets", "etablissements", "groupe", "fils", "freres", "and", "et", "france",
             "de", "du", "des", "la", "le", "les", "l", "d"]
@@ -126,7 +148,7 @@ def _fr_acronyms(e):
 
 def fr_name_exprs(col="business_name"):
     """As name_exprs, with French rules: dotted legal forms joined; French legal forms and articles also
-    removed from name_core. Used only by 'prep.py france' (v6; not in the final file)."""
+    removed from name_core. Used only by 'prep.py unlabelled' (v6; not in the final file)."""
     raw = pl.col(col).fill_null("")
     low = _fr_acronyms(_ascii_lower(pl.col(col)).str.strip_chars())
     is_domain = low.str.contains(_DOMAIN)
@@ -150,7 +172,7 @@ def fr_name_exprs(col="business_name"):
 
 def fr_addr_exprs(col="business_address"):
     """As addr_exprs, with French rules: street abbreviations expanded, region / departement names and
-    articles dropped, no learned map. Used only by 'prep.py france' (v6; not in the final file)."""
+    articles dropped, no learned map. Used only by 'prep.py unlabelled' (v6; not in the final file)."""
     raw = pl.col(col).fill_null("")
     x = _ascii_lower(pl.col(col)).str.replace_all(_NONLATIN, " ")
     x = _squash(x.str.replace_all(r"[^a-z0-9]+", " ").str.replace_all(_JUNK, " "))

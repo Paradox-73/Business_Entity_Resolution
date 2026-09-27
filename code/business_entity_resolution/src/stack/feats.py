@@ -2,7 +2,7 @@
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # src/
 import polars as pl
-from common import WORK, id_to_int
+from common import WORK, country_code, id_to_int, labelled_countries
 
 # Folders; each can be set by an environment variable (build_final.py sets all three).
 OUT = os.environ.get("BER_STACK_DIR", os.path.join(WORK, "stack"))  # this stacker's own files (ho/te tables, models, results)
@@ -30,11 +30,13 @@ def rec_info(split):
     return pl.concat(parts).collect()
 
 
-def s1_info(split, countries=("US", "India")):
-    """Per S1 row of `countries`: integer id s, S1 id, ctry (1 = India), no-address flag, first house number and
-    a hash of the core name."""
+def s1_info(split, countries=None):
+    """Per S1 row of `countries` (default: the countries with training labels, common.labelled_countries): integer id
+    s, S1 id, ctry (the country's position in labelled_countries(): US 0, India 1 in this dataset), no-address flag,
+    first house number and a hash of the core name."""
+    countries = labelled_countries() if countries is None else countries
     return (pl.scan_parquet(os.path.join(WORK, f"{split}_s1.parquet")).filter(pl.col("country").is_in(list(countries)))
-            .select(s=id_to_int("entity_id").cast(pl.Int64), s1_id="entity_id", ctry=(pl.col("country") == "India").cast(pl.Int8),
+            .select(s=id_to_int("entity_id").cast(pl.Int64), s1_id="entity_id", ctry=country_code().cast(pl.Int8),
                     s_noaddr=pl.col("addr_missing").cast(pl.Int8),
                     s_hn=pl.col("addr_nums").list.first().cast(pl.Float64, strict=False), s_nh=pl.col("name_core").hash())
             .collect())

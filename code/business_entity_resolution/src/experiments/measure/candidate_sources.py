@@ -42,6 +42,16 @@ for f in ("fr_same_address_safe", "fr_typo_safe", "fr_amp_safe"):
 print("  outside both tables and all of the above:", rest.join(g8, on=["q", "s"], how="anti").join(
     pl.concat([i64(pl.read_parquet(os.path.join(SETS, f + ".parquet"))) for f in ("fr_same_address_safe", "fr_typo_safe", "fr_amp_safe")]),
     on=["q", "s"], how="anti").height)
+# the same-address rule's pairs in the final files (methodology section 3, "Third source")
+sa = pl.read_parquet(os.path.join(SETS, "fr_same_address_safe.parquet"), columns=["q", "s", "acr"]).with_columns(
+    pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
+sam = sa.join(M, on=["q", "s"])
+cu = i64(pl.read_parquet(os.path.join(WORK, "blend9", "cand_union.parquet"), columns=["q", "s"]))
+sa_new = sam.join(cu, on=["q", "s"], how="anti")
+print(f"fr_same_address_safe pairs matched in v10d: {sam.height}; in cand_union {sam.height - sa_new.height}; "
+      f"else in the second pipeline's (v8) matched file {sa_new.join(g8, on=['q', 's']).height}; "
+      f"new candidates {sa_new.join(g8, on=['q', 's'], how='anti').height} "
+      f"(acronym names {sa_new.join(g8, on=['q', 's'], how='anti')['acr'].sum()})")
 n = C.group_by("s").len("n").join(s1, on="s").sort("n", descending=True)
 print("S1 rows with the most candidates:")
 print(n.head(8).select("country", "n", "business_name", "business_address"))

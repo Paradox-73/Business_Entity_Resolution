@@ -1,0 +1,83 @@
+[    0.0s] work <root>\work; sets <root>\code\business_entity_resolution\sets; build $BER_BUILD; out $BER_OUT
+[    0.0s] run build_final.py step v9z_scores
+[    1.3s] France recoveries: 5883 pairs, 5881 in the score table, 2 appended
+[    2.8s] run finalize.py full_cons $BER_BUILD\v9z_all $BER_BUILD\test_scores_v9z_france.parquet
+[   11.3s] legal-form veto (countries without training labels): 204415 pairs set to p2=0 (9824 with p2 >= 0.3)
+[   12.3s] France: rule {'type': 'expf', 'floor': 0.5, 'alpha': 1.0, 'prob': 'p2'}, 1434957 records scored, 852676 matched, 243891 S1 non-empty
+[   13.9s] India: rule {'type': 'expf', 'floor': 0.5, 'alpha': 1.0, 'prob': 'p2'}, 4717437 records scored, 2724125 matched, 763361 S1 non-empty
+[   15.2s] US: rule {'type': 'expf', 'floor': 0.5, 'alpha': 1.0, 'prob': 'p2'}, 3816995 records scored, 2249372 matched, 625118 S1 non-empty
+[   16.1s] wrote $BER_BUILD\v9z_all/matching_results.tsv: 1732544 rows, 1632370 non-empty
+[   20.2s] run blend_second.py $BER_BUILD\blend <root>\code\business_entity_resolution\sets <root>\work\blend9
+[    5.3s] pairs of the countries with training labels: ours 9581207, second pipeline 8967670, union 10182858
+[    5.7s] list movers: removed 839, restored 832 (29 of them scored by neither pipeline)
+[   12.7s] wrote 10182887 scored US/India pairs, 12243553 candidate pairs, 4998617 matched US/India pairs
+[   15.3s] test_scores_usi_blend_w04_movers.parquet: rows 10182887 vs reference 10182887; only here 0, only in reference 0; max abs p2 difference 0.0
+[   17.4s] cand_union.parquet: rows 12243553 vs reference 12243553; only here 0, only in reference 0
+[   38.7s] run build_final.py step v10a
+[    2.8s] wrote $BER_BUILD\v10a: pairs by country [('France', 852676), ('India', 2746464), ('US', 2252153)]
+[   41.8s] run build_final.py step v10b
+[    5.5s] pairs of the second generator in countries without training labels, outside our lists, record unmatched: 7266; kept 4825 (S1 rows 4488, of them empty in the base file 174)
+[    6.3s] wrote $BER_BUILD\v10b/matching_results.tsv: 5856118 pairs (base 5851293 + 4825)
+[   48.7s] run build_final.py step v10c
+[    7.5s] same-address: 259452 S1 rows and 577492 unmatched records in countries without training labels; with an address key 258145 / 538129 (8s)
+[   13.9s] same-address: 42511 prefiltered same-address pairs, 849 with noise-only names, 709 unique per record (14s)
+[   14.4s] same-address: 2 pairs in the excluded sets, 14 records the second pipeline matches elsewhere; 693 left
+[   15.4s] same-address: 309 pass the safety filter, 298 with a non-empty S1 row (acronym 239, other 59) (15s)
+[   15.4s] same-address pairs regenerated 298; equal to fr_same_address_safe: True (only regenerated 0, only shipped 0)
+[   16.1s] base $BER_BUILD\v10b\matching_results.tsv: 5856118 pairs
+[   16.5s] add <root>\code\business_entity_resolution\sets\fr_typo_safe.parquet: 416 pairs, 416 new (0 records moved from another S1 row)
+[   16.9s] add <root>\code\business_entity_resolution\sets\fr_same_address_safe.parquet: 298 pairs, 298 new (0 records moved from another S1 row)
+[   17.3s] add <root>\code\business_entity_resolution\sets\fr_amp_safe.parquet: 88 pairs, 88 new (0 records moved from another S1 row)
+[   18.3s] wrote $BER_BUILD\v10c/matching_results.tsv: 5856920 pairs, 1632818 S1 rows non-empty
+[   67.3s] run stack\build_test.py 
+[    1.3s] ours small 9581207 bge 9581207 e5l 9581207 gbdt 8955355
+[    4.4s] ours pairs 9581207; op2 null 625852
+[    5.5s] gathik pairs 8967670; gp2 null 0
+[    9.4s] union pairs 10182858; cand_union US/India 10182887; in both 10182858
+[   12.2s] blend reference pairs 10182887; non-mover pairs differing from this p: 0
+shape: (0, 5)
+┌─────┬─────┬─────┬──────┬─────┐
+│ q   ┆ s   ┆ p   ┆ pref ┆ mv  │
+│ --- ┆ --- ┆ --- ┆ ---  ┆ --- │
+│ i64 ┆ i64 ┆ f32 ┆ f32  ┆ i32 │
+╞═════╪═════╪═════╪══════╪═════╡
+└─────┴─────┴─────┴──────┴─────┘
+[   29.7s] test feature rows 10182858
+[   97.6s] run stack\apply_test.py _avg
+[   83.7s] test pairs 10182887; baseline p after movers differing from the blend_second.py p2: 0
+[   89.9s] wrote $BER_BUILD\stack\usi_pairs_avg.parquet: 5004363 US/India pairs
+<root>\code\business_entity_resolution\src\stack\apply_test.py:47: DeprecationWarning: In Polars 2.0, the default behavior for `empty_as_null` will change to `False`. To keep the current behavior, explicitly set `empty_as_null=True`.
+  v = (v.with_columns(q_id=pl.col("matched_entity_ids").fill_null("").str.split(",")).explode("q_id").filter(pl.col("q_id") != "")
+[   92.2s] {"baseline_vs_v10c": {"base_pairs": 4998617, "v10c_pairs": 4998617, "base_minus_v10c": 0, "v10c_minus_base": 0}, "US": {"added": 3733, "removed": 841, "rows_changed": 4475, "rows": 663106}, "India": {"added": 3288, "removed": 434, "rows_changed": 3660, "rows": 809986}, "share_rows_changed": 0.005522397786424745, "new_pairs": 5004363}
+[  190.7s] run build_final.py step v10d
+[    1.7s] stacker US/India pairs 5004363; its difference from v10c equals the saved sets: {'usi_stack_add': True, 'usi_stack_remove': True}
+[    2.5s] base $BER_BUILD\v10c\matching_results.tsv: 5856920 pairs
+[    2.5s] veto <root>\code\business_entity_resolution\sets\fr_street_veto.parquet: 256 pairs, 256 removed
+[    3.5s] wrote $BER_BUILD\v10d_france/matching_results.tsv: 5856664 pairs, 1632818 S1 rows non-empty
+[    6.3s] wrote $BER_OUT: pairs by country [('France', 858047), ('India', 2749318), ('US', 2255045)]
+[    8.6s] <root>\work\gathik\v8_matching_results.tsv: 5340 matched pairs from this generator added as candidates
+[    9.2s] <root>\code\business_entity_resolution\sets\fr_same_address_safe.parquet: 223 matched pairs from this generator added as candidates
+[   11.2s] candidates 12249116 pairs (7.07 per S1 row); matched 5862410, not in candidates 0
+[   13.2s] wrote $BER_OUT/candidate_pairs.tsv: 1732544 rows, 1732360 non-empty
+[  204.4s] run check_submission.py $BER_OUT\matching_results.tsv
+<root>\code\business_entity_resolution\src\check_submission.py:12: DeprecationWarning: In Polars 2.0, the default behavior for `empty_as_null` will change to `False`. To keep the current behavior, explicitly set `empty_as_null=True`.
+  e = (m.with_columns(ids=pl.col("matched_entity_ids").fill_null("").str.split(",")).explode("ids")
+1732544 rows, 5862410 matched ids; {'duplicate S1 rows': 0, 'missing S1 rows': 0, 'unknown S1 rows': 0, 'duplicate id in a list': 0, 'ids not in test S2/S3': 0}
+PASS
+[  207.9s] run <root>\student_resource\utils\validate_submission.py
+ML Challenge 2026 — submission validator
+  test dir: <root>\student_resource\dataset\test
+  required S1 entities: 1732544
+  valid S2/S3 match IDs: 9969589
+  matching_results.tsv: 1732544 rows (99603 empty, 1632941 non-empty).
+  candidate_pairs.tsv: 1732544 rows (184 empty, 1732360 non-empty).
+
+PASS — no blocking issues found. Safe to submit.
+file                         rebuilt md5                        uploaded md5                       same
+v10a/matching_results.tsv    c55eb79152a49674df6154c00edcc672   c55eb79152a49674df6154c00edcc672   True
+v10b/matching_results.tsv    76cc451a73f6adb3cf81c9c8f7eab8ba   76cc451a73f6adb3cf81c9c8f7eab8ba   True
+v10c/matching_results.tsv    6fc63685e4ef18a00923f165675d0bad   6fc63685e4ef18a00923f165675d0bad   True
+v10d/matching_results.tsv    18412329111b5d9c43df3a58df0574d1   18412329111b5d9c43df3a58df0574d1   True
+v10d/candidate_pairs.tsv     a2ddcb5d26ede94f780fd2c4d87519a7   a2ddcb5d26ede94f780fd2c4d87519a7   True
+checks: {'same_address_regenerated': True, 'usi_stack_add': True, 'usi_stack_remove': True}
+ALL IDENTICAL

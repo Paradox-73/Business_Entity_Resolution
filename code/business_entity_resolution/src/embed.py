@@ -1,4 +1,4 @@
-"""Learned name embeddings for S2/S3 rows whose name is in a non-Latin (Indian) script.
+"""Learned name embeddings for S2/S3 rows whose name is in a non-Latin script (Indian scripts in this dataset).
 
 Model: intfloat/multilingual-e5-small (MIT licence, 118M params), fine-tuned with in-batch
 contrastive loss (MultipleNegativesRanking) on TRAIN pairs (non-Latin S2/S3 name, S1 name).
@@ -18,7 +18,7 @@ import polars as pl
 import torch
 import torch.nn.functional as F
 from transformers import AutoModel, AutoTokenizer
-from common import WORK, log, read_truth
+from common import WORK, log, nonlatin_countries, read_truth
 
 BASE = "intfloat/multilingual-e5-small"
 FT = os.path.join(WORK, "e5_ft_addr")
@@ -119,10 +119,11 @@ def train(epochs=1, bs=128, lr=5e-5, max_pairs=300_000):
 
 
 def recall_at_k(path, n=20000, k=10):
-    """Held-out (non-embedding partition) non-Latin rows: is the true S1 in the top-k of all train India S1?"""
+    """Held-out (non-embedding partition) non-Latin rows: is the true S1 in the top-k of all train S1 rows of the
+    countries that have non-Latin-script records (common.nonlatin_countries; India in this dataset)?"""
     pr = nonlatin_pairs(False).sample(n, seed=1)
     s1 = pl.read_parquet(os.path.join(WORK, "train_s1.parquet"), columns=["entity_id", "business_name", "addr", "country"])
-    s1 = s1.filter(pl.col("country") == "India").with_columns(text_col())
+    s1 = s1.filter(pl.col("country").is_in(list(nonlatin_countries("train")))).with_columns(text_col())
     enc = Encoder(path)
     S = torch.tensor(enc.encode(s1["text"].to_list()), device=DEV)
     Q = torch.tensor(enc.encode(pr["q_name"].to_list()), device=DEV)

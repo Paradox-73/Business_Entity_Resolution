@@ -9,7 +9,7 @@ ho_added / ho_removed<TAG>.parquet and res_<mode><TAG>.json.
 import os, sys, time, json, pickle
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from feats import *
-from common import macro_f05_df, log
+from common import labelled_countries, macro_f05_df, log
 from pipeline import decide_expf
 import numpy as np
 import lightgbm as lgb
@@ -21,12 +21,13 @@ FEATS = [f for f in FEATS if f not in DROP]
 d = pl.read_parquet(os.path.join(OUT, "ho.parquet"), columns=["q", "s", "y", "half", "q_noaddr"] + [f for f in FEATS if f != "q_noaddr"])
 ev = pl.read_parquet(os.path.join(OUT, "ev.parquet"))
 tr = pl.read_parquet(os.path.join(OUT, "truth_ev.parquet"))
+COUNTRIES = list(enumerate(labelled_countries()))    # (ctry code, country): (0, US), (1, India) in this dataset
 SUB = {"all": ev.select("s")}
 for h in (0, 1):
     SUB[f"h{h}"] = ev.filter(pl.col("half") == h).select("s")
-    for c, cn in ((0, "US"), (1, "IN")):
+    for c, cn in COUNTRIES:
         SUB[f"h{h}{cn}"] = ev.filter((pl.col("half") == h) & (pl.col("ctry") == c)).select("s")
-for c, cn in ((0, "US"), (1, "IN")):
+for c, cn in COUNTRIES:
     SUB[cn] = ev.filter(pl.col("ctry") == c).select("s")
 
 
@@ -63,7 +64,7 @@ if MODE in ("all", "grid"):
             show(f"grid floor {fl} alpha {al}", o, base)
     res["grid"] = {f"{k[0]}_{k[1]}": v for k, v in grid.items()}
     # cross-fitted per-country choice: best on half A per country -> applied to half B
-    for c in ("US", "IN"):
+    for _, c in COUNTRIES:
         for h, oh in ((0, 1), (1, 0)):
             kbest = max(grid, key=lambda k: grid[k][f"h{h}{c}"])
             log(f"per-country {c}: chosen on h{h} {kbest}, gain on h{oh}{c} {1e5 * (grid[kbest][f'h{oh}{c}'] - base[f'h{oh}{c}']):+.1f}e-5")
@@ -74,7 +75,7 @@ if MODE in ("all", "iso"):
     P = d["p"].to_numpy(); Y = d["y"].to_numpy(); H = d["half"].to_numpy(); C = d["ctry"].to_numpy()
     acc = np.zeros(d.height, dtype=np.float32); cnt = np.zeros(d.height, dtype=np.float32)
     for h in (0, 1):
-        for c in (0, 1):
+        for c, _ in COUNTRIES:
             m = (H == h) & (C == c) & ~np.isnan(P)
             ir = IsotonicRegression(out_of_bounds="clip", y_min=0, y_max=1).fit(P[m], Y[m])
             tgt = (H != h) & (C == c) & ~np.isnan(P)

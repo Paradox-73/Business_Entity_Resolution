@@ -13,6 +13,9 @@ Folders (environment variables; default in brackets):
   BER_VALIDATOR  the official validate_submission.py [<repo>/student_resource/utils/validate_submission.py]; skipped
              when the file does not exist
 
+Below, US/India means the countries with training labels and France the test countries without them; the code
+reads both sets from the data (common.labelled_countries, common.unlabelled_countries) and names no country.
+
 Steps, in the order the versions were built (submissions/LOG.md). Steps 2 (finalize.py) to 10 call the scripts that
 built those versions; the score edits of steps 1-2 follow README step 16 and france_fix/v9z/recall/r5_build.py and
 france_fix/v9z/build/b1_scores.py, and give the same scores as the saved work/frfix3/test_scores_v9y_combo.parquet.
@@ -26,13 +29,16 @@ france_fix/v9z/build/b1_scores.py, and give the same scores as the saved work/fr
    4  v10a = step 3 US/India rows + step 2 France rows (assemble_final.py).
    5  v10b = france_recall.py on v10a (+4,825 France pairs from the second pipeline's matches).
    6  v10c = apply_pair_sets.py on v10b: + fr_typo_safe, fr_same_address_safe, fr_amp_safe (+802 France pairs).
+      Before that, same_address.py regenerates the same-address pairs from the cleaned test files, v10b, the three
+      France veto sets of steps 1-2 and the second pipeline's matching file; the build stops unless they are exactly
+      the pairs of fr_same_address_safe (the shipped file is then applied, as uploaded).
    7  v10d US/India: stack/build_test.py (per-pair features of both pipelines) and stack/apply_test.py with
       lgb_models_avg.pkl (mean of 4 LightGBM models, list-mover overrides after the model, decide_expf(0.5, 1.0)).
       Check: its difference from the v10c US/India pairs equals usi_stack_add / usi_stack_remove.
    8  v10d France = apply_pair_sets.py on v10c: - fr_street_veto (-256 France pairs).
    9  assemble_final.py: US/India rows of step 7 + France rows of step 8 -> $BER_OUT/matching_results.tsv.
-  10  make_candidates.py: cand_union + the second pipeline's matched pairs + fr_same_address_safe
-      -> $BER_OUT/candidate_pairs.tsv.
+  10  make_candidates.py: cand_union + the second pipeline's matched pairs + fr_same_address_safe (the pairs of the
+      same-address rule, regenerated in step 6) -> $BER_OUT/candidate_pairs.tsv.
   11  Checks: check_submission.py, the official validator (--check-ids), md5 of the rebuilt v10a, v10b, v10c and both
       final files against the files uploaded on 27 Sep 2026.
 
@@ -55,7 +61,8 @@ import apply_pair_sets
 import assemble_final
 import france_recall
 import make_candidates
-from common import DATA, OUT, ROOT, WORK, id_to_int, int_to_id, log
+import same_address
+from common import DATA, OUT, ROOT, WORK, id_to_int, int_to_id, is_labelled, log
 
 SRC = os.path.dirname(os.path.abspath(__file__))
 SETS = os.environ.get("BER_SETS", os.path.join(os.path.dirname(SRC), "sets"))
@@ -149,10 +156,10 @@ def write_matching(pairs, out_dir):
 
 
 def us_india(tsv):
-    """US/India (s, q) pairs of a matching_results.tsv."""
+    """(s, q) pairs of a matching_results.tsv in the countries with training labels (US, India)."""
     s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country"]).select(
         s=id_to_int("entity_id").cast(pl.Int64), country="country")
-    return apply_pair_sets.pairs(tsv).join(s1, on="s").filter(pl.col("country") != "France").select("s", "q")
+    return apply_pair_sets.pairs(tsv).join(s1, on="s").filter(is_labelled()).select("s", "q")
 
 
 def same_pairs(a, b):
@@ -177,7 +184,18 @@ def step_v10b():
 
 
 def step_v10c():
-    """Step 6: v10c = v10b + the three France pair sets."""
+    """Step 6: regenerate the same-address set from its rule and check it equals the shipped one, then v10c = v10b +
+    the three France pair sets."""
+    regen = same_address.build(bd("v10b", "matching_results.tsv"), GATHIK_TSV,
+                               [st("desc_veto_set.parquet"), st("fp_veto_set.parquet"), st("moreveto_stem2_set.parquet")])
+    regen.write_parquet(bd("same_address_pairs.parquet"))
+    equal, only_new, only_shipped = same_address.compare(regen, pl.read_parquet(st("fr_same_address_safe.parquet"), columns=["s", "q"]))
+    log(f"same-address pairs regenerated {regen.height}; equal to fr_same_address_safe: {equal} "
+        f"(only regenerated {only_new.height}, only shipped {only_shipped.height})")
+    if not equal:
+        log(f"only regenerated:\n{only_new}\nonly shipped:\n{only_shipped}")
+    json.dump({"same_address_regenerated": equal}, open(bd("same_address_check.json"), "w"))
+    assert equal, "same_address.py does not regenerate fr_same_address_safe.parquet"
     apply_pair_sets.main(bd("v10b", "matching_results.tsv"), bd("v10c"),
                          "+" + st("fr_typo_safe.parquet"), "+" + st("fr_same_address_safe.parquet"), "+" + st("fr_amp_safe.parquet"))
 
@@ -240,7 +258,8 @@ def main():
         h = md5(p)
         bad += h != EXPECTED[k]
         print(f"{k:28s} {h:34s} {EXPECTED[k]:34s} {h == EXPECTED[k]}")
-    ok = json.load(open(bd("stack_check.json")))
+    ok = {**json.load(open(bd("same_address_check.json"))), **json.load(open(bd("stack_check.json")))}
+    print("checks:", ok)
     bad += sum(not v for v in ok.values())
     print("ALL IDENTICAL" if bad == 0 else f"{bad} DIFFERENCES")
     sys.exit(1 if bad else 0)

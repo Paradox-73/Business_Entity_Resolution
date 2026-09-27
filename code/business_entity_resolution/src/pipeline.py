@@ -579,7 +579,8 @@ def predict(model_tag, test_tag):
     del B0
     cols2 = res.get("cols2", FEATURES + S2FEATS)
     if any(c in cols2 for c in SIBFEATS):
-        # sibling text must be cleaned the same way as the pairs (e.g. 'testfr' = France with French rules)
+        # sibling text must be cleaned the same way as the pairs (e.g. 'testfr' = the countries without training
+        # labels, cleaned with the French rules)
         split = test_tag if os.path.exists(os.path.join(WORK, f"{test_tag}_s2.parquet")) else "test"
         qattr = load_qattr(split)
         B = sibling_features(B, qattr)
@@ -591,7 +592,7 @@ def predict(model_tag, test_tag):
     dec = res["decision"] if res["use_stage2"] else {"type": "thr", "t": res["stage1_global"][0]}
     M = apply_decision(B, prob, dec, qinfo)
     log(f"decision {prob} {dec}: {M.height} matches")
-    sfx = "" if test_tag == "test" else f"_{test_tag}"      # e.g. France-only rebuild must not overwrite full-test scores
+    sfx = "" if test_tag == "test" else f"_{test_tag}"      # e.g. the 'testfr' rebuild must not overwrite full-test scores
     B.select("q", "s", "p1", "p2").write_parquet(os.path.join(WORK, f"test_scores_{model_tag}{sfx}.parquet"))
     ids = s1.select("s", source1_entity_id="s1_id")
     for df, name, col in ((M.group_by("s").agg(pl.col("q").sort()), "matching_results.tsv", "matched_entity_ids"),

@@ -1,5 +1,6 @@
-"""France recall from a second candidate generator: add its France matches that our France candidate lists never
-contained, for records the base file leaves unmatched, when the record differs from the S1 row only by generator noise.
+"""Recall for the countries without training labels (common.unlabelled_countries; France in this test set) from a
+second candidate generator: add its matches in those countries that our candidate lists never contained, for records the
+base file leaves unmatched, when the record differs from the S1 row only by generator noise.
 
 Kept: no word-level name change (a swapped/added/dropped word is how France look-alikes are made), no legal-form change
 or addition, house number not moved up (the look-alike direction), and the generator's probability >= 0.8.
@@ -17,10 +18,10 @@ all-lowercase (look-alikes 2-4%, true records 0.2-0.4%); France rows are under-m
 import os
 import sys
 import polars as pl
-from common import WORK, id_to_int, int_to_id, log, read_tsv
+from common import WORK, id_to_int, int_to_id, is_unlabelled, log, read_tsv
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "france_fix", "artifacts", "census"))
-from ops import ops  # noqa: E402
+from ops import ops  # noqa: E402  (called without its country argument, so its output does not depend on the country)
 
 REJECT = r"n_swap:|n_add:|n_drop:|n_legal_change|n_legal_add|a_num_up"
 OUR_LISTS = ["test_scores_full_cons.parquet", os.path.join("ce_x", "test_rows.parquet")]
@@ -33,8 +34,8 @@ def pairs(p):
 
 
 def main(base_tsv, g_tsv, g_scores, out):
-    """Add to base_tsv the France pairs of the second pipeline's matching file that are outside our candidate
-    lists, for records base_tsv leaves unmatched, when the change detector (ops.py) finds no word-level or legal-form
+    """Add to base_tsv the pairs of the second pipeline's matching file in countries without training labels that are
+    outside our candidate lists, for records base_tsv leaves unmatched, when the change detector (ops.py) finds no word-level or legal-form
     change and no house number moved up, and the second pipeline's p2 >= 0.8. Writes <out>/matching_results.tsv and
     <out>/france_recall_added.parquet."""
     s1 = pl.read_parquet(os.path.join(WORK, "test_s1.parquet"), columns=["entity_id", "country", "business_name", "business_address"]).select(
@@ -44,7 +45,7 @@ def main(base_tsv, g_tsv, g_scores, out):
     lists = pl.concat([pl.read_parquet(os.path.join(WORK, f), columns=["q", "s"]).with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
                        for f in OUR_LISTS]).unique()
     base = pairs(base_tsv)
-    fr = s1.filter(pl.col("country") == "France").select("s")
+    fr = s1.filter(is_unlabelled()).select("s")
     g = pairs(g_tsv).join(fr, on="s")
     gp = pl.read_parquet(g_scores, columns=["q", "s", "p2"]).with_columns(pl.col("q").cast(pl.Int64), pl.col("s").cast(pl.Int64))
     cand = g.join(lists, on=["q", "s"], how="anti").join(base.select("q"), on="q", how="anti").join(gp, on=["q", "s"], how="left")
@@ -52,7 +53,8 @@ def main(base_tsv, g_tsv, g_scores, out):
     cand = cand.with_columns(ops=pl.Series([";".join(sorted(ops(r["qn"] or "", r["qa"] or "", r["sn"] or "", r["sa"] or "")))
                                             for r in cand.iter_rows(named=True)], dtype=pl.Utf8))
     add = cand.filter(~pl.col("ops").str.contains(REJECT) & (pl.col("p2").fill_null(0) >= 0.8))
-    log(f"France pairs of the second generator outside our lists, record unmatched: {cand.height}; kept {add.height} "
+    log(f"pairs of the second generator in countries without training labels, outside our lists, record unmatched: "
+        f"{cand.height}; kept {add.height} "
         f"(S1 rows {add['s'].n_unique()}, of them empty in the base file {add.join(base.select('s').unique(), on='s', how='anti')['s'].n_unique()})")
     P = pl.concat([base, add.select("s", "q")])
     df = P.group_by("s").agg(pl.col("q").sort()).with_columns(matched_entity_ids=pl.col("q").list.eval(int_to_id("")).list.join(","))

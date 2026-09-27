@@ -1,5 +1,6 @@
-"""Apply the cross-fitted stacker (mean of the models in the file) to test US/India, movers after the model, decide_expf;
-write OUT/usi_pairs<tag>.parquet and, when submissions/v10c exists, a diff against the v10c US/India pairs.
+"""Apply the cross-fitted stacker (mean of the models in the file) to the test rows of the countries with training
+labels (US, India; common.labelled_countries), movers after the model, decide_expf; write OUT/usi_pairs<tag>.parquet
+and, when submissions/v10c exists, a diff against the v10c pairs of those countries.
 
   python apply_test.py [<tag> [<floor> [<alpha>]]]    models: OUT/lgb_models<tag>.pkl, or the file named by BER_STACK_MODELS
   v10d: python apply_test.py _avg
@@ -9,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from common import ROOT  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from feats import *
-from common import log
+from common import labelled_countries, log
 from pipeline import decide_expf
 import numpy as np
 
@@ -53,7 +54,7 @@ out["baseline_vs_v10c"] = {"base_pairs": base.height, "v10c_pairs": v.height,
 add = new.join(v, on=["s", "q"], how="anti").join(s1.select("s", "ctry"), on="s")
 rmv = v.join(new, on=["s", "q"], how="anti").join(s1.select("s", "ctry"), on="s")
 chg = pl.concat([add.select("s"), rmv.select("s")]).unique()
-for c, cn in ((0, "US"), (1, "India")):
+for c, cn in enumerate(labelled_countries()):
     n = s1.filter(pl.col("ctry") == c).height
     out[cn] = {"added": add.filter(pl.col("ctry") == c).height, "removed": rmv.filter(pl.col("ctry") == c).height,
                "rows_changed": chg.join(s1.filter(pl.col("ctry") == c).select("s"), on="s").height, "rows": n}

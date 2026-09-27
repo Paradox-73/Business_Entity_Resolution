@@ -17,7 +17,7 @@ final upload, from the saved files of the final build.
 | `change_table.py` | share of true pairs with each name and address change ("Noise in true pairs") | 2.1 |
 | `lowercase_test.py` | all-lowercase share of records whose name adds or swaps in a noise or descriptor word, and of other changed words (Artefact 2) | 2.1 |
 | `test_candidates.py` | test pairs at each stage, per S1 row and per record, reduction ratios, final candidate file by country, composition by source | 3 |
-| `candidate_sources.py` | final candidate pairs outside our score table by source; S1 rows with the most candidates (more than 50 and 100) | 3 |
+| `candidate_sources.py` | final candidate pairs outside our score table by source; where the same-address pairs sit (added 28 Sep); S1 rows with the most candidates (more than 50 and 100) | 3 |
 | `heldout_recall.py` | recall ceilings of each candidate definition on the held-out half, by country and with / without address | 3 |
 | `compute_cost.py` | search and feature rates, laptop wall-clock per step, transformer throughput, disk use of `work/`, parsed from `work/*.log` | 3, B.6 |
 | `stack_importance.py` | split gain of each stacker feature, mean over the 4 models of `sets/lgb_models_avg.pkl` | 4 |

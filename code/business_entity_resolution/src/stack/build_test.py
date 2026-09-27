@@ -1,4 +1,5 @@
-"""Test feature table for US/India on the union of both pipelines' pairs -> OUT/te.parquet.
+"""Test feature table for the countries with training labels (US, India) on the union of both pipelines' pairs
+-> OUT/te.parquet.
 Checks that the baseline p reproduces the blend_second.py probabilities in BLEND (before the list-mover overrides)."""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -11,7 +12,7 @@ S = s1.select("s")
 
 
 def rd(path, cols, ren):
-    """US/India rows of a test score file: q, s and the columns `cols`, renamed by `ren` and cast to float32."""
+    """Rows of a test score file in the countries with training labels: q, s and the columns `cols`, renamed by `ren` and cast to float32."""
     return i64(pl.read_parquet(path, columns=["q", "s"] + cols)).join(S, on="s").rename(ren).with_columns(
         pl.col(list(ren.values())).cast(pl.Float32))
 

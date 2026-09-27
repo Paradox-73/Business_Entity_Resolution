@@ -1,4 +1,5 @@
-"""Shared paths, file reading, id encoding and the competition metric."""
+"""Shared paths, file reading, the country sets derived from the data, id encoding and the competition metric."""
+import functools
 import os
 import time
 import polars as pl
@@ -48,6 +49,54 @@ def read_tsv(path):
 def raw_path(split, k):
     """Path of a raw challenge file: DATA/<split>/<split>_source<k>.tsv."""
     return os.path.join(DATA, split, f"{split}_source{k}.tsv")
+
+
+# ---- countries: an open set of labels read from the data. No country name is written in the pipeline code.
+@functools.lru_cache(maxsize=None)
+def split_countries(split):
+    """Country labels of the raw Source 1 file of `split`, most S1 rows first (ties by name). Read once per process."""
+    d = pl.read_csv(raw_path(split, 1), separator="\t", quote_char=None, infer_schema_length=0, columns=["country"])
+    n = d.drop_nulls("country").group_by("country").len()
+    return tuple(n.sort(["len", "country"], descending=[True, False])["country"].to_list())
+
+
+def labelled_countries():
+    """Countries with training labels: the countries of the train Source 1 file (US, India in this dataset), most S1
+    rows first. That order gives each one its integer code (country_code)."""
+    return split_countries("train")
+
+
+def unlabelled_countries():
+    """Test countries without training labels: countries of the test Source 1 file that the train Source 1 file does
+    not have (France in this test set). The rules chosen without labels apply to these countries."""
+    lab = set(labelled_countries())
+    return tuple(c for c in split_countries("test") if c not in lab)
+
+
+def is_labelled(col="country"):
+    """Polars expression: the row's country has training labels."""
+    return pl.col(col).is_in(list(labelled_countries()))
+
+
+def is_unlabelled(col="country"):
+    """Polars expression: the row's country has no training labels."""
+    return pl.col(col).is_in(list(unlabelled_countries()))
+
+
+def country_code(col="country"):
+    """Polars expression: position of the row's country in labelled_countries() (US 0, India 1 in this dataset),
+    null for a country without training labels."""
+    lab = list(labelled_countries())
+    return pl.col(col).replace_strict(lab, list(range(len(lab))), default=None, return_dtype=pl.Int8)
+
+
+@functools.lru_cache(maxsize=None)
+def nonlatin_countries(split):
+    """Countries with at least one Source 2/3 record of `split` whose name is in a non-Latin script: the flag
+    name_nonlatin that normalize.name_exprs saves in WORK/<split>_s{2,3}.parquet (India in this dataset)."""
+    q = pl.concat([pl.read_parquet(os.path.join(WORK, f"{split}_s{k}.parquet"), columns=["country", "name_nonlatin"])
+                   for k in (2, 3)])
+    return tuple(sorted(q.filter("name_nonlatin")["country"].unique().to_list()))
 
 
 def id_to_int(col):

@@ -277,9 +277,42 @@ The second pipeline runs our code with these settings (`BER_V8=1`, name cap 10,0
 - its search output keeps 0.9963 of held-out true pairs at 40.5 candidates per record, against 0.9851 at 30.9 for ours [E: v9 GBDT results; R: code README step 3];
 - the audit is worth +0.0032 held-out before any transformer (GBDT 0.98151 -> 0.98472).
 
+#### Third source: the same-address rule (countries without training labels)
+
+`same_address.py` proposes pairs for the countries without training labels (France) that neither search finds [R: `same_address.py` docstring; code README step 26]. It looks at the records that the matching file (v10b) leaves unmatched, and compares each one only with the S1 rows at exactly the same address.
+- **Why it exists.** The data generator rewrites some true copies as an acronym ("AC" for "Animation Culture SCI") or a web domain. Such a name shares almost no text with the S1 name, so the name search misses it. At an address with several businesses, the address searches' top-k lists can also leave the S1 row out. 141 of the 223 candidate pairs this rule adds are in no score table of either pipeline (table below).
+- **Blocking key.** The key is the house number(s) plus the set of street words of the first address component that holds a number.
+  - Accents and filler words (de, du, la, of, the ...) are dropped, and street types are shortened (rue -> r, avenue -> ave).
+  - A standalone 5-digit number is read as a postcode and ignored. When the component has no street word, the next component is added.
+  - The postcode reading fits France (0.4% of France test S1 addresses hold a standalone 5-digit number) but would drop 5-digit house numbers, which 10.9% of US test S1 addresses hold (both shares counted on 28 Sep 2026 in `test_source1.tsv`). The rule runs only on the countries without training labels.
+  - Records and S1 rows of the same country with the same key form the candidate pairs. Keys shared by more than 50 S1 rows are skipped.
+- **When a pair is accepted.** All of these must hold:
+  - the change detector `ops.name_ops` (also used by the second-pipeline recall of section 4) finds only generator noise between the two names: acronym or initials, web domain, squashed words, word order, digits for letters, case, accents, brackets, hyphens, commas, '&' for 'and', a legal form dropped, dotted or abbreviated;
+  - exactly one S1 row at the address passes that test;
+  - the pair is not in one of the France veto sets of section 4, and the second pipeline does not match the record to another S1 row;
+  - an acronym name needs a single S1 row at the address;
+  - any other name needs no same-name S1 row on the same street at another number and no changed place or street component, and a web-domain name must spell the S1 name exactly;
+  - the S1 row already has a match: the rule never fills an empty S1 row.
+
+| Stage (test, France) [R: `same_address.py` docstring; the same counts are printed by `same_address.py` in every `build_final.py` run, e.g. `src/logs/build_final_28sep.log`] | Pairs |
+|---|---:|
+| unmatched France records (with an address key) | 577,492 (538,129) |
+| same-address pairs that pass a cheap name prefilter | 42,511 |
+| names that differ only by generator noise | 849 |
+| the only such S1 row of the record | 709 |
+| not vetoed, not matched elsewhere by the second pipeline | 693 |
+| safety filter | 309 |
+| S1 row already matched: `sets/fr_same_address_safe.parquet` | **298** (239 acronym, 59 other names) |
+
+- **In the final files.** v10c adds the 298 pairs as matches, and v10d still matches all 298 [M: `candidate_sources.py`, run on 28 Sep 2026].
+  - 66 were already in the scored candidate list, and 9 in the second pipeline's matching file.
+  - The other **223** are new candidate pairs. They form the same-address row of the table below; 217 of them are acronym names.
+- **Labelled analog.** On the held-out half of train, the rule up to the one-S1-row test gave 651 pairs for records our held-out prediction leaves unmatched, and 99.85% of them are true pairs (US 509, India 142) [R: `same_address.py` docstring].
+- **Reproduction.** `build_final.py` regenerates the 298 pairs from the cleaned test files and the rebuilt v10b. It stops unless they equal the shipped set, then applies the shipped set, so both output files keep their md5 (Appendix A).
+
 #### What `candidate_pairs.tsv` contains
 
-The problem statement defines the candidate file as the pairs the final model runs inference over. Ours is the union of the pairs that a final model scored, plus the matched pairs that the France steps took from the second pipeline and from the same-address rule [M: `test_candidates.py`, `candidate_sources.py`; the last two rows from the log of `make_candidates.py`]:
+The problem statement defines the candidate file as the pairs the final model runs inference over. Ours is the union of the pairs that a final model scored, plus the matched pairs that the France steps took from the second pipeline and from the same-address rule (the third source, above) [M: `test_candidates.py`, `candidate_sources.py`; the last two rows from the log of `make_candidates.py`]:
 
 | Part | US | India | France | All |
 |---|---:|---:|---:|---:|
@@ -289,7 +322,7 @@ The problem statement defines the candidate file as the pairs the final model ru
 | + second pipeline's US/India stage-2 pairs not already present (the v10d stacker scores them) | 178,789 | 422,862 | 0 | 601,651 |
 | + pairs restored by the US/India list-mover fix (section 4) | 4 | 25 | 0 | 29 |
 | + France pairs of the second pipeline's matching file that the final file matches, not already present | 0 | 0 | 5,340 | 5,340 |
-| + pairs of the France same-address rule (section 4) that the final file matches, not already present (141 of them are in no score table of either pipeline) | 0 | 0 | 223 | 223 |
+| + pairs of the France same-address rule (`same_address.py`, above) that the final file matches, not already present (141 of them are in no score table of either pipeline) | 0 | 0 | 223 | 223 |
 | **= `candidate_pairs.tsv`** | **4,345,438** | **5,837,449** | **2,066,229** | **12,249,116** |
 
 - Every matched pair of `matching_results.tsv` (5,862,410 pairs) is a candidate. The official validator checks this and printed PASS [F: v10d].
@@ -361,7 +394,8 @@ Each candidate definition was rebuilt out-of-fold on the held-out half (1,102,48
   - TF-IDF over character 3-grams of the cleaned core name;
   - TF-IDF over word 1-2-grams of the cleaned address, and of core name + address;
   - fine-tuned multilingual-e5-small embeddings of "name | address" (non-Latin names; every record in the second pipeline);
-  - the same-country constraint.
+  - the same-country constraint;
+  - for records left unmatched in the countries without training labels (France), an exact address key (house number + street words) with a noise-only name test: the same-address rule, 223 pairs of the final candidate file.
   - These are followed by the stage-1 LightGBM filter that keeps each record's top 1-2 candidates (ranks 3-5 for close calls).
 - **Candidate pairs generated:**
   - **12,249,116** = 7.07 per S1 row, 1.23 per record; RR 0.99999818 against same-country pairs.
@@ -419,7 +453,7 @@ Each candidate definition was rebuilt out-of-fold on the held-out half (1,102,48
     - per-family probabilities (e5-small, bge-reranker-v2-m3, e5-large), our family blend, the second pipeline's probability, the v10a blend;
     - both pipelines' p1 and p2, which pipeline scored the pair and whether it was a transformer close call there;
     - rank and margin of the blend within the record;
-    - country;
+    - country: its position in the list of countries with training labels, ordered by train S1 rows (US 0, India 1);
     - record and S1 row without address;
     - signed and absolute house-number difference;
     - exact core-name equality;
@@ -443,7 +477,7 @@ Cross-encoder families [R: code README steps 8-12; E: e5-large as a third cross-
 | multilingual-e5-base (MIT) | 278.0M | 16-bit frozen word table, batch 16, 420k rows (model A2) | laptop | France rows only |
 | bge-reranker-v2-m3 (Apache-2.0) | 567.8M | full fine-tuning, batch 64, lr 2e-5, 26,000 steps per fold | RTX A6000 48 GB (Bhavya Jain) | US/India (3 folds) |
 | bge-reranker-v2-m3, second pipeline | 567.8M | full fine-tuning, 1M close-call pairs per fold | RTX PRO 6000 Blackwell 96 GB (lab server) | the second pipeline's 3 folds |
-| multilingual-e5-large (MIT) | about 560M (published figure) | full fine-tuning, batch 64, lr 2e-5 | RTX A6000 (folds 0-1), lab server (fold 2) | input `c` of the v10d stacker |
+| multilingual-e5-large (MIT) | 559.9M (computed from its published configuration, B.7) | full fine-tuning, batch 64, lr 2e-5 | RTX A6000 (folds 0-1), lab server (fold 2) | input `c` of the v10d stacker |
 
 Held-out, all close calls rescored [E: 3-fold transformers; e5-large; M: best-rule scores in `work/ce_b2/rule_<family>folds.json`]:
 - e5-small family 0.98903; bge family 0.98951; blend 0.3 / 0.7 0.98950 (v7p);
@@ -503,6 +537,8 @@ Held-out, all close calls rescored [E: 3-fold transformers; e5-large; M: best-ru
 
 #### France: decisions without labels
 
+In the code, the rules of this section apply to the countries without training labels: the test Source 1 countries that the train Source 1 file does not have (`common.unlabelled_countries()`, read from the data). In this test set that is France alone. No country name is written in the pipeline code (Appendix B.8).
+
 France rows use the same stage 1 and stage 2. They keep the halves transformer set of v7ens:
 - 0.7 x the e5-small models A + B, 0.3 x the e5-base model A2;
 - the France score of this set was measured on the leaderboard: about 0.952 with the min rule and the legal-form veto, before the later rules;
@@ -526,7 +562,7 @@ where 0.1497 is France's share of test S1 rows. This assumes the public subset h
 | Recoveries: p2 = 0.95 | 5,883 [M: `set_summary.py`]: earlier missed-match tiers A1-A4 (4,150; estimated true 0.91-0.96); acronym, dotted-legal-form or web-domain copies at the same address (1,731; 0.85-0.95); exact-name twins (2). Mean estimated true share 0.93. | per-group estimated true share saved with the set (column `est` of `sets/recall_add_set.parquet`) [M: `set_summary.py`; F: v9z]. For the 4,150 earlier missed-match pairs: lowercase test about 0.9 true, a leaderboard-realism fit 0.75-0.8 [L: v9f] | v9zm +0.000405 together with the list-mover fix. The France part is about +0.00026 to +0.00029 LB, France +0.0017 to +0.0019 (estimate). |
 | Same-stem descriptor veto (sport -> sportive) | 73 | as the descriptor veto | inside v9zm |
 | Second-pipeline France matches outside our lists, for records we leave unmatched. Only pairs that differ by generator noise are kept: no word-level name change, no legal-form change or addition, house number not moved up, second-pipeline p >= 0.8. | 4,825 | US/India analog on labels: 98.4% true (28,113 pairs), 98.8% under the filter; 0 kept non-domain names are all-lowercase [R: `france_recall.py`] | v10b: +0.000309 LB = France +0.00206 (predicted +0.0018) [L] |
-| Three verified France sets [F: v10c] | 802 | typos that garble the S1 word with its letters (416; US/India analog 99.3% true); the same-address rule, one S1 row at the address and the name differs only by acronym or noise (298; train precision 99.85% on 651 pairs); "&" written as "et" or "+" (88) | inside v10d; expected +0.00003 to +0.00005 LB |
+| Three verified France sets [F: v10c] | 802 | typos that garble the S1 word with its letters (416; US/India analog 99.3% true); the same-address rule, one S1 row at the address and the name differs only by acronym or noise (298; train precision 99.85% on 651 pairs; rule in `same_address.py`, section 3); "&" written as "et" or "+" (88) | inside v10d; expected +0.00003 to +0.00005 LB |
 | Street veto: p = 0 when name and house number are equal but the street is completely different, and both bge families score below 0.3 | 256 | US/India analog: 1 of 87 true [F: v10d] | inside v10d |
 
 **Rules the leaderboard or the labels refuted**
@@ -541,7 +577,7 @@ where 0.1497 is France's share of test S1 rows. This assumes the public subset h
 | Per-pattern recalibration of France to US true rates | count bound | would accept 1.01M France records against about 0.88M expected (3.4 per S1 row) [E: France checks] |
 | France house-number veto (v7k) | label-free audit | the first-number parser picks apartment and floor numbers ("Appartement 22"); uploaded once inside v7g_num together with another France change (not attributable); not in the final file [E: Transformer at test-like density; L: v7g_num] |
 | France pairs both pipelines scored but only the second accepted | US/India analog | 69.6% true, and France descriptor classes about 0-10% true; not used [E: Final-upload hunt] |
-| France vetoes where both bge families score low (13,092 pairs) | v9z leaderboard result | 83% are "X <descriptor> SARL" -> "... Developpement / Groupe / & Associes". The US-trained models treat these as look-alikes, but the v9z result shows them about 90% true. Only the 256-pair street veto was kept [E: Second final-upload hunt]. |
+| France vetoes where both bge families score low (13,092 pairs) | v9zm leaderboard result (v9zm carried the v9z France rows; v9z itself was not uploaded) | 83% are "X <descriptor> SARL" -> "... Developpement / Groupe / & Associes". The US-trained models treat these as look-alikes, but the v9zm result shows them about 90% true. Only the 256-pair street veto was kept [E: Second final-upload hunt]. |
 
 The lesson: a rule's truth rate can differ between countries (a descriptor swap is noise in US/India but marks a decoy in France). What transferred were the instruments: the lowercase share and the house-number direction are properties of how the generator makes decoys, and they hold in both labelled countries.
 
@@ -660,7 +696,7 @@ After the v10a blend (0.99205) [E: France recall from the second pipeline]:
 - **Right candidate rejected because the house number changed or is missing** ("11" vs "127 Lindsey Avenue") [E: Run 9].
   - Before the transformers: changed number 0.00290, no number 0.00196 of this mistake type's 0.00692 [E: Held-out loss breakdown].
 - **True S1 row not among the stage-1 top 2** (0.00681 at v7b). The ranks 3-5 of close calls and the second pipeline's lists were added for this.
-- **France noise-suffix names.** "X <descriptor> SARL" -> "... Developpement / Groupe / & Associes" is about 90% true in France (v9z result), but the US-trained transformers score it low [E: Second final-upload hunt]. The noise-word additions (9,800 pairs) recover part of it.
+- **France noise-suffix names.** "X <descriptor> SARL" -> "... Developpement / Groupe / & Associes" is about 90% true in France (v9zm upload, which carried the v9z France rows), but the US-trained transformers score it low [E: Second final-upload hunt]. The noise-word additions (9,800 pairs) recover part of it.
 - **France acronyms and web domains.** "SDS" = "Securite Darts Sport"; "PC" = "Paranormal Club"; "nantesclubsas.com" [E: Cleaning bugs found; R: `france_recall.py`].
   - About 11k France records are acronyms of their S1 name (53.6% of short-name records have an S1 row with equal initials at the same number, against 16.1% by chance).
   - The recoveries and the v10c same-address rule add the ones the checks accept.
@@ -696,15 +732,16 @@ The submission zip holds `code/business_entity_resolution/` with `README.md` (ev
 
 | Path | Contents |
 |---|---|
-| `src/common.py`, `normalize.py`, `learn_maps.py`, `prep.py` | folders (`BER_DATA`, `BER_WORK`, `BER_OUT`), TSV reading, macro F0.5; cleaning with maps learned from train matches |
+| `src/common.py`, `normalize.py`, `learn_maps.py`, `prep.py` | folders (`BER_DATA`, `BER_WORK`, `BER_OUT`), TSV reading, the country sets read from the data, macro F0.5; cleaning with maps learned from train matches |
 | `src/embed.py` | fine-tuned multilingual-e5-small; vectors for the embedding search |
 | `src/candidates.py` | the four searches and the 55 pair features |
 | `src/pipeline.py` | `build` / `train` / `predict`: stages 1 and 2, grouped 3-fold validation, expected-F0.5 decision |
 | `src/topk5.py`, `src/rerank.py`, `src/ce_folds.py`, `src/bundle.py` | ranks 3-5; close calls, cross-encoder training and scoring, stage 3; the 3-fold runner for a GPU machine and its input bundle |
 | `src/blocking_b2.py` | wide US/India test search |
-| `src/blend.py`, `src/fr_minrule.py`, `src/finalize.py` | family blend and rule choice; France min rule; legal-form veto and per-country decision |
+| `src/blend.py`, `src/fr_minrule.py`, `src/finalize.py` | family blend and rule choice; min rule and legal-form veto for the countries without training labels (France); per-country decision |
 | `src/assemble_final.py`, `src/make_candidates.py`, `src/check_submission.py` | final matching file, candidate file, rule check |
 | `src/movers/build_movers.py`, `src/blend_second.py`, `src/france_recall.py`, `src/apply_pair_sets.py` | v9zm list-mover fix, v10a blend, v10b France recall, v10c/v10d pair sets |
+| `src/same_address.py` | the same-address rule (section 3): regenerates the 298 pairs of `sets/fr_same_address_safe.parquet` from the cleaned test files and v10b |
 | `src/stack/` | v10d stacker: `build_ho.py`, `fit.py`, `score_avg.py`, `merge_models.py`, `build_test.py`, `apply_test.py`, `feats.py` (commands in `stack/README.md`) |
 | `src/build_final.py` | rebuilds the final files from the saved score files and `sets/` (below) |
 | `src/france_fix/` | the France analyses that chose each France set (generator change census `artifacts/census/`, look-alike and missed-match hunts, leaderboard fits, `v9z/`, `final_hunt/`); run once, interactively; index in `src/france_fix/README.md` |
@@ -728,6 +765,7 @@ The submission zip holds `code/business_entity_resolution/` with `README.md` (ev
 - `build_final.py` ran from an empty build folder in 304 s on the laptop. Each step runs in its own process; the largest (`stack/build_test.py`) used 5.46 GB [M: `src/logs/build_final_memory.txt`, sampled by `peak_memory.py`].
 - The md5 of the rebuilt v10a, v10b and v10c files and of both final files equal those of the uploaded files: `matching_results.tsv` `18412329111b5d9c43df3a58df0574d1`, `candidate_pairs.tsv` `a2ddcb5d26ede94f780fd2c4d87519a7`.
 - `check_submission.py` and the official validator (`--check-ids`) printed PASS.
+- 28 Sep 2026: after the same-address check was added and the country names were removed from the code, `build_final.py` ran again from an empty build folder [M: `src/logs/build_final_28sep.log`]. `same_address.py` regenerated the 298 shipped pairs in 16 s, all five md5 values were unchanged, and both checkers printed PASS.
 
 **What is exact and what depends on saved outputs**
 - **Exact:** every step inside `build_final.py`, given the saved score files. It calls the same scripts that built each version.
@@ -735,7 +773,7 @@ The submission zip holds `code/business_entity_resolution/` with `README.md` (ev
   - GPU transformer training is not bit-for-bit deterministic. Retrained cross-encoders give close but not identical scores.
   - The second pipeline's output was produced on the lab server and received as files.
 - **Shipped as saved outputs:**
-  - the France pair sets, chosen by the interactive analyses in `src/france_fix/`;
+  - the France pair sets, chosen by the interactive analyses in `src/france_fix/`. The same-address set is also regenerated by `same_address.py` inside `build_final.py`, which stops if the regenerated pairs differ from the shipped ones (on 28 Sep 2026: 298 pairs, identical);
   - the mover tiers, which `movers/build_movers.py` rebuilds identically from the saved v7p, v7q and v9y files;
   - the stacker models: the `fit.py` commands in `stack/README.md` were reconstructed from the saved models' feature lists, not logged at the time.
 
@@ -877,26 +915,79 @@ Throughput [M: `compute_cost.py`]:
 
 #### B.7 Models and licences
 
+Every pretrained model the code loads. Licences are the `license` tags of the models' Hugging Face Hub pages, read on 27 Sep 2026 [R: code README section 10].
+
 | Model | Licence | Parameters | Use in the final file |
 |---|---|---|---|
 | intfloat/multilingual-e5-small | MIT | 117.7M (counted from the weights) | embedding search (fine-tuned); cross-encoders (US/India 3 folds; France halves models) |
 | intfloat/multilingual-e5-base | MIT | 278.0M (counted) | cross-encoder A2 (France rows) |
-| BAAI/bge-reranker-v2-m3 | Apache-2.0 | 567.8M (counted) | cross-encoder, 3 folds, in both pipelines |
-| intfloat/multilingual-e5-large | MIT | about 560M (published figure; weights not on the laptop) | cross-encoder, 3 folds; stacker input |
+| BAAI/bge-reranker-v2-m3 | Apache-2.0 | 567.8M (counted; the Hub page gives the same 567,755,777) | cross-encoder, 3 folds, in both pipelines |
+| intfloat/multilingual-e5-large | MIT | 559.9M (computed from its published configuration; weights not on the laptop) | cross-encoder, 3 folds; stacker input |
+| microsoft/mdeberta-v3-base | MIT | about 276M (published figure) | none: only the default of `rerank.py train` when no model is named; every documented command names one |
 | LightGBM 4.7.0 | MIT | tree ensembles | stage 1, stacker |
 | XGBoost 2.0.3 | Apache-2.0 | tree ensembles | stages 2 and 3; the second pipeline's stage 1 |
 
-- Every model is under 0.6B parameters (limit 8B) and carries an MIT or Apache-2.0 licence.
-- Parameter counts marked "counted" come from the saved weight files [R: code README section 10].
+- **Counted:** the sum of tensor sizes in `model.safetensors`, read from the file header on 27 Sep 2026, for the Hub checkpoints and for the saved fine-tuned models (`work/e5_ft_addr/`, `work/ce/model*/`).
+- **e5-large:** its published configuration is XLM-RoBERTa large, the architecture of bge-reranker-v2-m3, with 514 positions instead of 8,194. The layer-by-layer formula reproduces bge's counted 567,755,777 exactly and gives 559,890,432 for e5-large (559,891,457 as a cross-encoder). The Hub page rounds this to 560M.
+- **Size limit:** every model is under 0.6B parameters, against the 8B limit, and carries an MIT or Apache-2.0 licence. Summed over the 16 fine-tuned transformer copies behind the final file, the total is 6.07B:
+  - e5-small: 6 copies (the embedding model, A, B and 3 folds);
+  - e5-base: 1 (A2);
+  - bge: 6 (3 folds per pipeline);
+  - e5-large: 3 folds.
+- **Libraries:** every package in `requirements.txt` has an MIT, Apache-2.0 or BSD licence in its installed metadata. torch, numpy, scipy, scikit-learn and protobuf are BSD. The table with versions is in code README section 10.
 
 #### B.8 Fair play and data use
 
+**External data and network access** [R: code README section 10]
 - **No external data, APIs, gazetteers, geocoding or lookup services.** Nothing looks up a business or an address outside the provided files.
-- **Learned tables** (address short forms, local-script state names) are fitted on train matches only.
-- **Hand-written word lists** (legal forms, titles, noise and descriptor words, French street types) are in `normalize.py` and `france_fix/artifacts/census/ops.py`. The 25 Sep forum rules noted in `EXPERIMENTS.md` allow hand-written normalisation dictionaries, unsupervised statistics on test and self-training; they forbid libpostal, gazetteers and APIs.
-- **Transformers** are the public checkpoints listed in B.7, fine-tuned on the provided training data only.
-- **Test data was used only in two ways:**
-  - unsupervised statistics, such as pattern counts, lowercase shares and house-number differences of France records, and records per S1 row;
-  - leaderboard uploads, including the probe uploads listed in section 5.
-- Test pseudo-labels were tried for self-training and not used.
-- No identifier, row order or train/test overlap signal is used (section 2.1, "No shortcuts").
+- On 27 Sep 2026 we read every import in the 334 Python files and all 18 shell scripts of `code/business_entity_resolution/`. None imports a network library (requests, urllib, http, socket or similar), and none holds an API key or other credential. On 28 Sep 2026 the import scan was repeated over all 335 Python files, including the new `same_address.py`, with the same result.
+- The only network access:
+  - `from_pretrained` downloads the public checkpoints of B.7 on first use;
+  - `pip install` fetches the packages at setup;
+  - unattended scripts in `src/runners/` moved our own intermediate files between the team's machines by SSH/SFTP (the helper is not included) and pushed submission records to the team's git repository. Reproduction needs neither.
+
+**Training data**
+- Every learned table and model is fitted on the provided training data only:
+  - the address maps of `learn_maps.py` (short forms and local-script state names, from train matches);
+  - all tree models, including the stacker;
+  - the fine-tuning of the transformers, which start from the public checkpoints of B.7.
+- **Hand-written word lists** hold legal forms, titles, noise and descriptor words, French street types and region names, India state codes, US and India state abbreviations and spelled-out ordinals. They are in `normalize.py`, `finalize.py`, `same_address.py` (street types, filler and unit words of the address key) and `france_fix/artifacts/census/ops.py`.
+  - France has no labels. The French entries were chosen by reading France test records and counting the word differences between them and the S1 rows they confidently match (`normalize.py`, `france_fix/artifacts/census/`).
+- The 25 Sep forum rules noted in `EXPERIMENTS.md` allow hand-written normalisation dictionaries, unsupervised statistics on test and self-training. They forbid libpostal, gazetteers and APIs.
+
+**Country as an open set** [R: code README section 0]
+- The pipeline code (`src/*.py`, `src/stack/`, `src/movers/`) names no country and holds no fixed list of countries. `common.py` reads the countries from the `country` column of the raw Source 1 files.
+- The countries with training labels are those of `train_source1.tsv` (US, India). The US/India steps (wide search, list movers, the second-pipeline blend, the stacker) apply to them.
+- The countries without training labels are the other countries of `test_source1.tsv` (France). The rules chosen without labels (the min rule, legal-form veto and second-pipeline recall of section 4; the same-address rule of section 3) apply to them.
+- Three narrower sets are also read from the data:
+  - the countries whose records contain non-Latin-script names (India): used by the embedding model's recall check and by an optional stage-3 feature that the final file does not use;
+  - the countries whose S1 addresses name the states Tamil Nadu, Delhi or Orissa in more rows than they carry the short forms TN, DL, OD or Odisha (India: 382,283 rows against 656; US: 190 against 89,794): used by the second pipeline's cleaning;
+  - the stacker's country feature, the country's position in the list of countries with training labels (US 0, India 1).
+- The France pair sets in `sets/` are fixed lists of France test pairs, chosen by the France analyses of section 4. The other sets are the US/India list movers (written by `movers/build_movers.py`) and the two stacker check sets.
+- One file outside those folders is imported by the pipeline: the change detector `src/france_fix/artifacts/census/ops.py` (steps 25-26 of the code README). Its optional `country` argument compares the label with "France" and "India"; only the analysis scripts pass it, and the pipeline (`france_recall.py`, `same_address.py`) calls the detector without a country, so no pipeline output depends on it.
+- Replacing the country names in the code changed no output: on 28 Sep 2026 `build_final.py` rebuilt v10a-v10d with the same md5 values as before (Appendix A), and each helper returned exactly the set of countries the code used to name.
+
+**Test records** (the test set has no labels) were used in three ways:
+1. **Inference.** Some features are statistics over the test files themselves, computed without labels:
+   - the TF-IDF document frequencies of each search index are fitted on that country's test S1 rows;
+   - the chain size counts the test S1 rows that share a core name;
+   - the stage-2 group features compare the test records that point at the same S1 row.
+2. **Unsupervised statistics for designing and checking rules:**
+   - the comparison of test with train in section 2.1 (records per S1 row, look-alike share, density);
+   - for France, the label-free tests on France test records: the all-lowercase share, the house-number direction and the change classes of `ops.py`. These chose and checked every France pair set (section 4; `code/business_entity_resolution/sets/README.md`).
+3. **Tried and not used:**
+   - training on "test-like" train data, resampled to match test's density and look-alike share (v4);
+   - self-training on 1.03M pseudo-labelled test rows (B.5).
+
+**The public leaderboard** returned one score per upload; 17 uploads have a recorded score [L]. The scores were used in four ways:
+- **Choosing versions.** For example, v4's test-like training and v6's French cleaning were dropped after their scores.
+- **Probe uploads** (section 5):
+  - v5 and v7ens_frempty emptied every France row, which splits the score into a France part and a US/India part;
+  - v7i, v7j, v7m and v10b changed only France rows, so each measured one France rule;
+  - v9x put the second pipeline's US/India rows next to our France rows.
+- **Fitting one France model.** A logistic model of France pair truth rates (`src/france_fix/lbcal/`, reused by `france_fix/build/b10_classmodel.py` and `b11_free.py`) was fitted to France values derived from the public scores of v7ens_frempty, v7i, v7j, v7m and v7g_num.
+  - The fit wrote no pair set.
+  - It gave second estimates of true shares, next to the lowercase test: 0.77-0.81 for the 9,800 noise-word additions, and 0.75-0.8 for the 4,150 earlier missed-match pairs [L: v9b, v9f].
+- **Reading bundled results.** The v9zm upload, which carried the v9z France rows, showed France noise-suffix pairs to be about 90% true. On that evidence a 13,092-pair France veto was rejected (section 4, "Rules the leaderboard or the labels refuted").
+
+No identifier, row order or train/test overlap signal is used (section 2.1, "No shortcuts").

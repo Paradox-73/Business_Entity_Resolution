@@ -1,0 +1,6 @@
+{
+ "us_india": "v10a unchanged (0.6 ours + 0.4 gathik v9 per-pair p, list-mover fix, decide_expf 0.5)",
+ "france": "v10a France (v9zm) + 4,825 France pairs from gathik v9 outside our lists for records v10a leaves unmatched; kept only generator-noise pairs (no word-level name change, no legal-form change/add, number not moved up, gathik p >= 0.8); src/france_recall.py",
+ "evidence": "US/India analog on labels: such pairs 98.4% true (28,113), 98.8% under the filter, +0.098/N_S1 macro F each -> France +0.0018 F, LB +0.00027 expected; France non-domain names 0% lowercase (decoys 2-4%)",
+ "candidates": "cand_union + gathik matched pairs, 7.07 per S1, official validator PASS (--check-ids)"
+}

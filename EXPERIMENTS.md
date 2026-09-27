@@ -417,6 +417,16 @@ Final held-out F0.5, halves protocol (comparable with v7ens 0.98813; `build_comb
 - **France predicts the right NUMBER of matches per S1 but the wrong records.** v7ens matches per S1 row, share of rows with 0 / 1 / 2 / 3 / 4: France 5.7 / 7.0 / 18.4 / 24.6 / 21.1%, US 5.7 / 6.0 / 17.7 / 24.4 / 21.5%, train truth 5.6 / 5.4 / 17.0 / 24.0 / 21.9%; mean France 3.32, US 3.39, India 3.36 (truth 3.46). With F0.5 0.952 at ~the expected count, precision and recall are both ~0.95: ~40k wrong France pairs and ~40k missed ones. v7j's LB (-0.0163 France for +18k added pairs) fits this model: those additions were ~all false.
 - France acceptance per change pattern vs US/India train (v7ens): word swapped + same number 0.585 vs 0.843; same name + other number 0.095 vs 0.557; word added + other number 0.001 vs 0.109; other name + same number 0.396 vs 0.501. The number-changed cells were tested (v7j: France number-changed records are fakes); the same-number cells are what v7m's restore targets.
 
+### Wide test candidates (blocking_b2.py: combined search max_df 20000, top 40), 27 Sep 03:40-07:30
+
+- Build: India 150k-record chunks (~250 s each), US 100k (~110 s); ~50 candidates per record; France chunks hard-linked from production. Stage 1+2 on all test chunks: 93 min (LightGBM on CPU).
+- **France p2 identical to production (1,732,369 pairs, max diff 0)**, so the France chunks and stage 2 match production; US pairs new 3.94M / old 3.94M / both 3.83M, India 5.01M / 5.04M / 4.76M.
+- GBDT level (p2, best candidate per record, US/India): 12,488 records get an S1 the old lists never had with p2 >= 0.5 (India 9,980, US 2,508; 8,701 with p2 >= 0.9). Records keeping their best S1: 49,573 fall below 0.5 and 17,343 rise above it (stage-2 group features shift with the longer lists).
+- Labelled check of such movers (the recall check's rebuilt train sample, stage 1, 25k US / 30k India Latin records): records newly found as best at p1 >= 0.9 are 82-100% right; same-best records falling below 0.5 were only 27-32% right, rising ones 18-20%.
+- After stage 3 (e5-small folds, v7f's model; held-out unchanged 0.98838) the shift mostly disappears. **v7n vs v7f, US/India: +16.5k pairs (13.8k with a newly found S1), -8.3k.** Hybrid (`hybrid_b2.py`, only records whose best S1 is new): +13.8k / -0.4k (v7n_hyb).
+- Test transformer scoring: 585,295 new pairs in 409,885 records (e5-small ~5 min per fold on the laptop).
+- bge fold 1 (friend 2): AUC 0.99034 vs e5-small 0.98731 on the same 840k held-out close calls; top-1 0.96756 vs 0.96597; test corr with fold 0 0.989.
+
 ## Lessons (read before changing anything)
 
 - **Windows power throttling slowed background jobs 3-5x (found 26 Sep 03:55).** Windows 11 runs windowless background processes on the slow efficiency cores of the i5-12450H. Transformer training: 2.3 steps/s throttled (GPU 34% busy) vs 11.6 steps/s after opting out (GPU 86%). `common.py` now opts every pipeline process out at start; `work/unthrottle.py <pid>` does it for a running process.
